@@ -58,6 +58,15 @@ git status --short --branch
 
 The PHP version must report 8.5. If `/usr/local/bin/ea-php85` is not present, substitute the PHP 8.5 CLI path supplied by the host.
 
+If `composer` prints `command not found`, Composer is not on this Terminal session's `PATH`. Check common cPanel locations without changing the application:
+
+```sh
+command -v composer
+ls -l /usr/local/bin/composer /opt/cpanel/composer/bin/composer "$HOME/bin/composer" 2>/dev/null
+```
+
+If a Composer executable is listed, use its full path in place of `composer` below, for example `/opt/cpanel/composer/bin/composer install ...`. If none is present, ask the hosting provider to enable Composer 2 for your cPanel account or provide its supported installation instructions. Do not continue with dependency installation skipped: this GitHub repository intentionally does not include `vendor`.
+
 ### 3. Create and configure `.env`
 
 ```sh
@@ -149,7 +158,15 @@ Choose a unique email and a password of at least 12 characters containing upperc
 
 ### 6. Configure scheduler cron
 
-In cPanel **Cron Jobs**, add a job that runs every minute. Replace `CPANEL_USER` and the project path. Confirm the PHP binary path with the host first.
+In cPanel **Cron Jobs**, choose **Once Per Minute** in **Common Settings** (or enter `*` for minute, hour, day, month, and weekday). When cPanel presents separate schedule fields and a **Command** field, put only the command below in **Command**—do not paste the five-field `* * * * *` schedule into the command box. Replace `CPANEL_USER` and the project path. Confirm the PHP binary path with the host first.
+
+Command field:
+
+```sh
+cd /home/CPANEL_USER/apps/worifinance && /usr/local/bin/ea-php85 artisan schedule:run >> /dev/null 2>&1
+```
+
+If your cron editor accepts a single crontab line instead of separate schedule fields, use this complete line instead:
 
 ```cron
 * * * * * cd /home/CPANEL_USER/apps/worifinance && /usr/local/bin/ea-php85 artisan schedule:run >> /dev/null 2>&1
