@@ -1,6 +1,6 @@
 # Production deployment on cPanel
 
-This guide deploys Worifinance from GitHub to a cPanel account. Replace every uppercase placeholder with the value from your hosting account. Do not paste passwords, private keys, `.env` contents, or reset links into tickets or chat.
+This guide deploys Worifinance from `https://github.com/shseam13/worifinance` to a cPanel account. Replace hosting placeholders such as `CPANEL_USER`, database names, and domain values with those from your hosting account. Do not paste passwords, private keys, `.env` contents, or reset links into tickets or chat.
 
 ## Requirements and cPanel setup
 
@@ -30,7 +30,7 @@ For a public GitHub repository:
 ```sh
 mkdir -p "$HOME/apps"
 cd "$HOME/apps"
-git clone https://github.com/GITHUB_OWNER/GITHUB_REPOSITORY.git worifinance
+git clone https://github.com/shseam13/worifinance.git worifinance
 cd "$HOME/apps/worifinance"
 ```
 
@@ -39,7 +39,7 @@ For a private repository, first configure read-only GitHub access using cPanel *
 ```sh
 mkdir -p "$HOME/apps"
 cd "$HOME/apps"
-git clone git@github.com:GITHUB_OWNER/GITHUB_REPOSITORY.git worifinance
+git clone git@github.com:shseam13/worifinance.git worifinance
 cd "$HOME/apps/worifinance"
 ```
 
@@ -177,13 +177,13 @@ The scheduler processes annual account charges daily, including retries for unpa
 
 Before each release, make a database backup in cPanel **phpMyAdmin → Export** (or use the host's approved `mysqldump` command), and verify that the release's `public/build` directory was built locally and pushed to GitHub.
 
-Then run in cPanel Terminal; replace `PRODUCTION_BRANCH` with the deployed branch:
+Then run in cPanel Terminal to update from the deployed `main` branch:
 
 ```sh
 cd "$HOME/apps/worifinance"
 PHP_BIN=/usr/local/bin/ea-php85
 git status --short --branch
-git pull --ff-only origin PRODUCTION_BRANCH
+git pull --ff-only origin main
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 "$PHP_BIN" artisan optimize:clear
 "$PHP_BIN" artisan migrate --force
