@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" role="img" aria-labelledby="title">
+  <title id="title">Illustration of green land and a distant residential area</title>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e4f0e2"/><stop offset="1" stop-color="#b8d9c3"/></linearGradient>
+    <linearGradient id="field" x2="0" y2="1"><stop stop-color="#9bc48f"/><stop offset="1" stop-color="#618a66"/></linearGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1200v820H0z"/>
+  <circle cx="946" cy="152" r="78" fill="#f3e4b9"/>
+  <path d="M0 438c177-82 317-65 495 3 188-76 369-73 705 11v368H0z" fill="#a8cb9a"/>
+  <path d="M0 539c208-71 411-76 605-9 178-72 397-63 595 6v284H0z" fill="url(#field)"/>
+  <path d="M0 630c207-35 365-17 558 29 175-41 398-43 642 11v150H0z" fill="#799d63"/>
+  <path d="M95 407h126v92H95z" fill="#f4f0df"/><path d="m82 408 78-61 75 61z" fill="#668072"/>
+  <path d="M116 439h30v34h-30zm55 0h30v34h-30z" fill="#9abeb0"/>
+  <path d="M835 376h129v110H835z" fill="#e9e8d6"/><path d="m820 378 80-62 81 62z" fill="#738b75"/>
+  <path d="M856 414h31v39h-31zm57 0h31v39h-31z" fill="#91b5a5"/>
+  <path d="M0 567c174-27 352-6 522 40m-411-62c161-17 278-4 400 35m386-58c122-18 223-8 303 9" stroke="#e7d9a9" stroke-width="6" fill="none"/>
+  <path d="M284 539c12-58 20-97 33-139m0 64c-24-28-40-43-67-57m70 57c23-34 42-51 70-66m566 156c9-48 16-81 29-115m0 54c-21-23-34-36-58-48m61 48c20-29 36-44 60-56" stroke="#476f53" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M317 383c-17 23-34 32-59 36 27 5 41 1 64-14 16 18 34 22 57 16-24-10-37-22-49-43 25-2 43-10 61-27-27 8-46 8-71 3-4-23-12-39-30-56 6 27 8 43 2 65-24 1-42 6-64 19 30-4 45-4 89 1zM934 439c-15 20-29 28-51 32 24 4 37 1 56-12 14 16 30 19 51 14-21-8-33-19-43-37 22-2 38-9 54-24-24 7-41 7-63 2-3-20-10-35-26-50 5 23 7 38 2 57-21 1-37 5-57 16 26-3 40-3 77 2z" fill="#4f7e57"/>
+</svg>

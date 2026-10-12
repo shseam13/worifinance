@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" role="img" aria-labelledby="title">
+  <title id="title">Illustration of a modern commercial building in the city</title>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e3edf1"/><stop offset="1" stop-color="#bdd8d3"/></linearGradient>
+    <linearGradient id="tower" x2="1" y2="1"><stop stop-color="#faf9ee"/><stop offset="1" stop-color="#d1dfda"/></linearGradient>
+    <linearGradient id="windows" x2="0" y2="1"><stop stop-color="#9fc8c7"/><stop offset="1" stop-color="#5d8990"/></linearGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1200v820H0z"/>
+  <circle cx="932" cy="162" r="79" fill="#f6e6c1" opacity=".8"/>
+  <path d="M0 516 173 394l177 122V288l206 146V212l237 167V302l188 125 91-67 128 96v364H0z" fill="#a9c5bc" opacity=".6"/>
+  <path d="M0 620h1200v200H0z" fill="#d8ddcf"/>
+  <path d="M310 195h487v448H310z" fill="url(#tower)"/>
+  <path d="m276 195 278-91 280 91z" fill="#536f71"/>
+  <path d="M287 222h535v14H287zm0 73h535v13H287zm0 73h535v13H287zm0 73h535v13H287zm0 73h535v13H287z" fill="#c0d2ca"/>
+  <path d="M331 248h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zM331 321h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zM331 395h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zM331 468h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58zm92 0h58v52h-58z" fill="url(#windows)"/>
+  <path d="M535 545h72v98h-72z" fill="#ad936c"/>
+  <path d="M0 648h1200v31H0z" fill="#78928b"/>
+  <path d="M135 646v-58h66v58m-53-58v-89l40 22 25-44 31 30v81m761 58v-72h75v72m-52-72v-99l41 20 25-36 32 28v87" fill="#6e9381"/>
+  <path d="M67 738h1068m-1014-33h965" stroke="#f8f6e9" stroke-width="5" opacity=".85"/>
+</svg>
