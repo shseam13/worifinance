@@ -21,6 +21,67 @@ In **Domains**, set the site's document root to the application's `public` direc
 
 Never set the document root to the Laravel project root. The `.env`, `vendor`, and `storage` directories must not be web-accessible.
 
+### If cPanel locks the primary domain to `public_html`
+
+Ask the host first whether they can change the document root for the primary domain. If they cannot, do **not** move the Laravel project into `public_html` and do not create another nested `public` directory. Keep the application at `/home/worifinance/apps/worifinance`, publish only its web-public files into `/home/worifinance/public_html`, and use a front controller there that boots Laravel from the private application directory.
+
+First inspect the current document root and take a backup. Do not replace an existing website or files you need; ask the host before proceeding if `public_html` contains another live site or valuable files:
+
+```sh
+APP_DIR=/home/worifinance/apps/worifinance
+DOCROOT=/home/worifinance/public_html
+ls -la "$DOCROOT"
+BACKUP="$HOME/public_html.backup.$(date +%Y%m%d-%H%M%S)"
+cp -a "$DOCROOT" "$BACKUP"
+echo "Backup created at $BACKUP"
+```
+
+After confirming `public_html` is empty or contains only a replaceable default page, copy the Laravel public assets and rewrite rules. This copies only the contents of `public`; it does not copy `.env`, `vendor`, or the private application code:
+
+```sh
+cp -a "$APP_DIR/public/." "$DOCROOT/"
+```
+
+Replace `public_html/index.php` with this front controller. It points directly to the existing Laravel project; it does not move or expose the project directory:
+
+```sh
+cat > "$DOCROOT/index.php" <<'PHP'
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
+
+define('LARAVEL_START', microtime(true));
+
+$appDirectory = '/home/worifinance/apps/worifinance';
+
+if (file_exists($maintenance = $appDirectory.'/storage/framework/maintenance.php')) {
+    require $maintenance;
+}
+
+require $appDirectory.'/vendor/autoload.php';
+
+/** @var Application $app */
+$app = require_once $appDirectory.'/bootstrap/app.php';
+
+$app->handleRequest(Request::capture());
+PHP
+```
+
+The copied `.htaccess` sends non-file requests to this `index.php`. Make sure it exists as `$DOCROOT/.htaccess`. Link public uploads into the actual web document root (the regular `storage:link` command creates the link under the app's own `public` directory, not necessarily cPanel's `public_html`):
+
+```sh
+if [ -L "$DOCROOT/storage" ]; then
+    ls -l "$DOCROOT/storage"
+elif [ -e "$DOCROOT/storage" ]; then
+    echo "STOP: public_html/storage already exists; inspect it before changing anything."
+else
+    ln -s "$APP_DIR/storage/app/public" "$DOCROOT/storage"
+fi
+```
+
+Verify `/home/worifinance/public_html/index.php` and `.htaccess` exist, `vendor/autoload.php` exists under the private app directory, and the storage link points to `/home/worifinance/apps/worifinance/storage/app/public`. Test the site and uploaded project images. On future releases, copy the new contents of `$APP_DIR/public/` into `$DOCROOT/` after taking a backup, then restore the Laravel-bootstrapping `index.php` shown above; do not replace it with the app's unmodified `public/index.php`, whose relative paths assume Laravel's own public directory is the document root.
+
 ## First deployment
 
 ### 1. Clone the repository
