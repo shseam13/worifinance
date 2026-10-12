@@ -4,7 +4,7 @@ This guide deploys Worifinance from `https://github.com/shseam13/worifinance` to
 
 ## Requirements and cPanel setup
 
-- PHP 8.5 selected for the domain in **MultiPHP Manager**, with `ctype`, `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip` enabled.
+- PHP 8.5 selected for the domain in **MultiPHP Manager** for web requests; use the host's PHP 8.5 CLI binary for Terminal and cron. Enable `ctype`, `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip`.
 - MariaDB 10.11.19 (the reported version of the hosting database).
 - Composer 2 and Git available in cPanel Terminal.
 - A MariaDB database and database user created with **MySQL Database Wizard** and granted privileges on that database.
@@ -21,6 +21,8 @@ In **Domains**, set the site's document root to the application's `public` direc
 
 Never set the document root to the Laravel project root. The `.env`, `vendor`, and `storage` directories must not be web-accessible.
 
+In cPanel **MultiPHP Manager**, select the domain and set its PHP version to **8.5**. The `/usr/local/bin/ea-php85` CLI command selects PHP for Terminal and cron; it does not set the website's PHP handler. If `public_html/.htaccess` contains a cPanel-generated `AddHandler` for `ea-php82`, the website is still configured to use PHP 8.2. Change the version using MultiPHP Manager, not by editing cPanel's generated handler block, then check the `.htaccess` again. If PHP 8.5 is not offered, ask the hosting provider to enable it for the domain.
+
 ### If cPanel locks the primary domain to `public_html`
 
 Ask the host first whether they can change the document root for the primary domain. If they cannot, do **not** move the Laravel project into `public_html` and do not create another nested `public` directory. Keep the application at `/home/worifinance/apps/worifinance`, publish only its web-public files into `/home/worifinance/public_html`, and use a front controller there that boots Laravel from the private application directory.
@@ -36,10 +38,38 @@ cp -a "$DOCROOT" "$BACKUP"
 echo "Backup created at $BACKUP"
 ```
 
-After confirming `public_html` is empty or contains only a replaceable default page, copy the Laravel public assets and rewrite rules. This copies only the contents of `public`; it does not copy `.env`, `vendor`, or the private application code:
+After confirming `public_html` is empty or contains only a replaceable default page, back up its current `.htaccess`. Copy only the Laravel public files, excluding `.htaccess` so cPanel's PHP handler and PHP configuration directives are preserved:
 
 ```sh
-cp -a "$APP_DIR/public/." "$DOCROOT/"
+cp -a "$DOCROOT/.htaccess" "$HOME/public_html.htaccess.backup"
+rsync -a --exclude='/.htaccess' "$APP_DIR/public/" "$DOCROOT/"
+```
+
+If `rsync` is not available, ask the host to enable it or copy the public files in File Manager without overwriting `.htaccess`. Do not copy the Laravel `.htaccess` over the cPanel-generated file. After copying, add Laravel's rewrite rules to the existing `.htaccess` using File Manager or append this block in Terminal. Leave all existing cPanel-generated PHP handler/INI blocks in place and unchanged:
+
+```sh
+cat >> "$DOCROOT/.htaccess" <<'HTACCESS'
+
+# BEGIN Worifinance Laravel rewrites
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+# END Worifinance Laravel rewrites
+HTACCESS
 ```
 
 Replace `public_html/index.php` with this front controller. It points directly to the existing Laravel project; it does not move or expose the project directory:
