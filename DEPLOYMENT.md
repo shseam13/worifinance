@@ -1,120 +1,76 @@
-# Production deployment on cPanel
+# Worifinance cPanel Deployment
 
-This guide deploys Worifinance from `https://github.com/shseam13/worifinance` to a cPanel account. Replace hosting placeholders such as `CPANEL_USER`, database names, and domain values with those from your hosting account. Do not paste passwords, private keys, `.env` contents, or reset links into tickets or chat.
+This guide deploys `https://github.com/shseam13/worifinance` to cPanel without requiring Composer on the server. Composer is used on the Windows development computer to build a production `vendor` bundle, which is uploaded to the private application directory.
 
-## Requirements and cPanel setup
+Replace example account names, paths, database details, and domain names with the values from your cPanel account. Never share or commit `.env`, passwords, API tokens, private keys, or database backups.
 
-- PHP 8.5 selected for the domain in **MultiPHP Manager** for web requests; use the host's PHP 8.5 CLI binary for Terminal and cron. Enable `ctype`, `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip`.
-- MariaDB 10.11.19 (the reported version of the hosting database).
-- Composer 2 and Git available in cPanel Terminal.
-- A MariaDB database and database user created with **MySQL Database Wizard** and granted privileges on that database.
-- HTTPS enabled for the domain.
-- A mailbox on the domain (or another authenticated SMTP account) for password-reset email.
+## Deployment overview
 
-The application does not require a local MySQL server. Development and automated tests use SQLite.
+1. Confirm the host has PHP 8.5 configured correctly for web requests and create the database.
+2. Build the production dependencies and frontend assets on the development computer.
+3. Clone or update the application code on cPanel; upload and extract the dependency bundle outside `public_html`.
+4. Configure `.env` and the domain's public document root.
+5. Run Laravel setup, migrations, and create the first Super Admin.
+6. Configure the scheduler and verify the live site.
 
-In **Domains**, set the site's document root to the application's `public` directory, for example:
+The application and its `.env`, `vendor`, and `storage` directories must stay outside the public document root. Only Laravel's public files should be web-accessible.
 
-```text
-/home/CPANEL_USER/apps/worifinance/public
-```
+## 1. Prepare the hosting account
 
-Never set the document root to the Laravel project root. The `.env`, `vendor`, and `storage` directories must not be web-accessible.
+Ask the host to confirm the following before deploying:
 
-In cPanel **MultiPHP Manager**, select the domain and set its PHP version to **8.5**. The `/usr/local/bin/ea-php85` CLI command selects PHP for Terminal and cron; it does not set the website's PHP handler. If `public_html/.htaccess` contains a cPanel-generated `AddHandler` for `ea-php82`, the website is still configured to use PHP 8.2. Change the version using MultiPHP Manager, not by editing cPanel's generated handler block, then check the `.htaccess` again. If PHP 8.5 is not offered, ask the hosting provider to enable it for the domain.
+- PHP 8.5 is enabled for the domain's web handler and CLI. The CLI PHP binary may be `/usr/local/bin/ea-php85` or another path supplied by the host.
+- Required PHP extensions are enabled: `ctype`, `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip`.
+- A MariaDB database and database user have been created, with privileges granted to that database. The reported hosting version is MariaDB 10.11.19.
+- HTTPS is enabled for the domain, and an SMTP mailbox is available for password-reset email.
+- Git is available in cPanel Terminal if you plan to clone and update the repository there.
 
-### If cPanel locks the primary domain to `public_html`
+The application does not require a local MySQL server; development and automated tests use SQLite. Composer 2 is required on the development computer, not on the cPanel server.
 
-Ask the host first whether they can change the document root for the primary domain. If they cannot, do **not** move the Laravel project into `public_html` and do not create another nested `public` directory. Keep the application at `/home/worifinance/apps/worifinance`, publish only its web-public files into `/home/worifinance/public_html`, and use a front controller there that boots Laravel from the private application directory.
+### Important: resolve PHP handler errors first
 
-First inspect the current document root and take a backup. Do not replace an existing website or files you need; ask the host before proceeding if `public_html` contains another live site or valuable files:
+If the browser displays **“This PHP CGI binary was compiled with force-cgi-redirect enabled”**, PHP is not being invoked through a working web handler, so Laravel has not run yet. Ask the hosting provider to configure the domain's PHP 8.5 Apache/CloudLinux handler. Do not try to fix this by editing cPanel-generated PHP handler lines in `.htaccess`, and do not copy another domain's handler configuration.
 
-```sh
-APP_DIR=/home/worifinance/apps/worifinance
-DOCROOT=/home/worifinance/public_html
-ls -la "$DOCROOT"
-BACKUP="$HOME/public_html.backup.$(date +%Y%m%d-%H%M%S)"
-cp -a "$DOCROOT" "$BACKUP"
-echo "Backup created at $BACKUP"
-```
+The PHP version selected for the web domain in **MultiPHP Manager** is separate from the PHP executable used in Terminal and cron. Do not edit cPanel-generated PHP handler or INI sections manually.
 
-After confirming `public_html` is empty or contains only a replaceable default page, back up its current `.htaccess`. Copy only the Laravel public files, excluding `.htaccess` so cPanel's PHP handler and PHP configuration directives are preserved:
+## 2. Build a release on Windows
 
-```sh
-cp -a "$DOCROOT/.htaccess" "$HOME/public_html.htaccess.backup"
-rsync -a --exclude='/.htaccess' "$APP_DIR/public/" "$DOCROOT/"
-```
+Run these commands in PowerShell on the development computer. They install only production PHP dependencies, verify the autoloader, create `vendor-production.zip`, and validate the archive entry that must be present:
 
-If `rsync` is not available, ask the host to enable it or copy the public files in File Manager without overwriting `.htaccess`. Do not copy the Laravel `.htaccess` over the cPanel-generated file. After copying, add Laravel's rewrite rules to the existing `.htaccess` using File Manager or append this block in Terminal. Leave all existing cPanel-generated PHP handler/INI blocks in place and unchanged:
+```powershell
+Set-Location 'D:\worifinance'
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+if ($LASTEXITCODE -ne 0) { throw 'Composer dependency installation failed.' }
+if (-not (Test-Path '.\vendor\autoload.php')) { throw 'vendor\autoload.php was not created.' }
 
-```sh
-cat >> "$DOCROOT/.htaccess" <<'HTACCESS'
+tar -a -c -f vendor-production.zip vendor
+if ($LASTEXITCODE -ne 0) { throw 'Could not create vendor-production.zip.' }
 
-# BEGIN Worifinance Laravel rewrites
-<IfModule mod_rewrite.c>
-    <IfModule mod_negotiation.c>
-        Options -MultiViews -Indexes
-    </IfModule>
-
-    RewriteEngine On
-    RewriteCond %{HTTP:Authorization} .
-    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-    RewriteCond %{HTTP:x-xsrf-token} .
-    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^ index.php [L]
-</IfModule>
-# END Worifinance Laravel rewrites
-HTACCESS
-```
-
-Replace `public_html/index.php` with this front controller. It points directly to the existing Laravel project; it does not move or expose the project directory:
-
-```sh
-cat > "$DOCROOT/index.php" <<'PHP'
-<?php
-
-use Illuminate\Foundation\Application;
-use Illuminate\Http\Request;
-
-define('LARAVEL_START', microtime(true));
-
-$appDirectory = '/home/worifinance/apps/worifinance';
-
-if (file_exists($maintenance = $appDirectory.'/storage/framework/maintenance.php')) {
-    require $maintenance;
+$archiveEntries = tar -tf vendor-production.zip
+if ($LASTEXITCODE -ne 0) { throw 'Could not read vendor-production.zip.' }
+if ($archiveEntries -notcontains 'vendor/autoload.php') {
+    throw 'The archive does not contain vendor/autoload.php.'
 }
-
-require $appDirectory.'/vendor/autoload.php';
-
-/** @var Application $app */
-$app = require_once $appDirectory.'/bootstrap/app.php';
-
-$app->handleRequest(Request::capture());
-PHP
+Get-Item .\vendor-production.zip | Select-Object FullName,Length,LastWriteTime
+Write-Output 'Verified archive entry: vendor/autoload.php'
 ```
 
-The copied `.htaccess` sends non-file requests to this `index.php`. Make sure it exists as `$DOCROOT/.htaccess`. Link public uploads into the actual web document root (the regular `storage:link` command creates the link under the app's own `public` directory, not necessarily cPanel's `public_html`):
+Build the frontend assets and commit/push the release code as well:
 
-```sh
-if [ -L "$DOCROOT/storage" ]; then
-    ls -l "$DOCROOT/storage"
-elif [ -e "$DOCROOT/storage" ]; then
-    echo "STOP: public_html/storage already exists; inspect it before changing anything."
-else
-    ln -s "$APP_DIR/storage/app/public" "$DOCROOT/storage"
-fi
+```powershell
+npm ci
+if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+npm run build
+if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 ```
 
-Verify `/home/worifinance/public_html/index.php` and `.htaccess` exist, `vendor/autoload.php` exists under the private app directory, and the storage link points to `/home/worifinance/apps/worifinance/storage/app/public`. Test the site and uploaded project images. On future releases, copy the new contents of `$APP_DIR/public/` into `$DOCROOT/` after taking a backup, then restore the Laravel-bootstrapping `index.php` shown above; do not replace it with the app's unmodified `public/index.php`, whose relative paths assume Laravel's own public directory is the document root.
+The code, `composer.lock`, `vendor-production.zip`, and `public/build` must all come from the same release. `vendor` and `vendor-production.zip` are excluded from Git; do not commit them. Repeat the dependency build and upload whenever `composer.lock` changes.
 
-## First deployment
+## 3. Put the application code and dependencies on cPanel
 
-### 1. Clone the repository
+Use a private application directory outside `public_html`. The commands below use `/home/worifinance/apps/worifinance`; substitute your actual cPanel username and application path.
+
+### First deployment: clone the repository
 
 For a public GitHub repository:
 
@@ -125,40 +81,32 @@ git clone https://github.com/shseam13/worifinance.git worifinance
 cd "$HOME/apps/worifinance"
 ```
 
-For a private repository, first configure read-only GitHub access using cPanel **Git Version Control** or a repository deploy key. Do not put a GitHub password or personal access token in the clone URL or shell history. Then use its SSH clone URL:
+For a private repository, configure read-only GitHub access through cPanel Git Version Control or a deploy key, then use the SSH clone URL. Do not put a password or personal access token in the clone URL.
+
+### Upload and extract the dependencies
+
+Use cPanel File Manager or SFTP to upload `vendor-production.zip` into the private application directory, for example `/home/worifinance/apps/worifinance`. Extract it there, not in `public_html`. Confirm the result is:
+
+```text
+/home/worifinance/apps/worifinance/vendor/autoload.php
+```
+
+If a partial `vendor` directory already exists, rename it in File Manager before extracting. Keep the renamed directory until the deployment has been verified.
+
+Before running Artisan, verify from cPanel Terminal:
 
 ```sh
-mkdir -p "$HOME/apps"
-cd "$HOME/apps"
-git clone git@github.com:shseam13/worifinance.git worifinance
 cd "$HOME/apps/worifinance"
+test -f vendor/autoload.php \
+  && echo "Production dependencies are present" \
+  || echo "STOP: upload and extract vendor-production.zip first"
 ```
 
-If cPanel requires a different directory, use that same absolute path in all commands below and set the domain document root to its `public` subdirectory.
+Never put `vendor-production.zip` or the `vendor` directory under `public_html`.
 
-### 2. Check the PHP and Composer commands
+## 4. Configure `.env`
 
-The common cPanel PHP 8.5 CLI executable is `/usr/local/bin/ea-php85`. Confirm the actual path with the hosting provider and use that path for every Artisan command and in the cron entry:
-
-```sh
-PHP_BIN=/usr/local/bin/ea-php85
-"$PHP_BIN" -v
-composer --version
-git status --short --branch
-```
-
-The PHP version must report 8.5. If `/usr/local/bin/ea-php85` is not present, substitute the PHP 8.5 CLI path supplied by the host.
-
-If `composer` prints `command not found`, Composer is not on this Terminal session's `PATH`. Check common cPanel locations without changing the application:
-
-```sh
-command -v composer
-ls -l /usr/local/bin/composer /opt/cpanel/composer/bin/composer "$HOME/bin/composer" 2>/dev/null
-```
-
-If a Composer executable is listed, use its full path in place of `composer` below, for example `/opt/cpanel/composer/bin/composer install ...`. If none is present, ask the hosting provider to enable Composer 2 for your cPanel account or provide its supported installation instructions. Do not continue with dependency installation skipped: this GitHub repository intentionally does not include `vendor`.
-
-### 3. Create and configure `.env`
+Create the environment file once, then edit it in cPanel File Manager or a terminal editor:
 
 ```sh
 cd "$HOME/apps/worifinance"
@@ -166,7 +114,7 @@ cp .env.example .env
 nano .env
 ```
 
-Set the production values in the editor. Keep `APP_KEY` empty for the first deployment; the command in the next step generates it. Enter the exact database name, username, and host shown in cPanel (database and username commonly include a cPanel account prefix):
+Set the production values. Use the exact database and SMTP settings supplied by the host:
 
 ```dotenv
 APP_NAME=Worifinance
@@ -199,20 +147,137 @@ MAIL_FROM_ADDRESS=YOUR_FULL_MAILBOX_ADDRESS
 MAIL_FROM_NAME="Worifinance"
 ```
 
-Use the database and SMTP host/port/encryption values provided by the hosting provider. For implicit TLS, the provider may require `MAIL_SCHEME=smtps` and port `465` instead. Use a mailbox that is authorized to send from `MAIL_FROM_ADDRESS`. Keep `APP_DEBUG=false` and use the HTTPS site URL: reset links are generated from `APP_URL`.
+For implicit TLS, the host may require `MAIL_SCHEME=smtps` and port `465`. Use an SMTP mailbox authorized to send from `MAIL_FROM_ADDRESS`. Keep `APP_DEBUG=false`; use the HTTPS site URL so password-reset links use the correct domain.
 
-Save and close nano with **Ctrl+O**, **Enter**, then **Ctrl+X**. Do not print `.env` to the terminal or add it to Git.
+Leave `APP_KEY` empty only for the first installation; Laravel will generate it in step 6. Never regenerate it for an existing installation. Do not print `.env` contents or commit the file.
 
-### 4. Install dependencies, build the application, and migrate
+## 5. Configure the website's public document root
 
-The repository release must include the compiled `public/build` directory and its Vite manifest. Build it on the development machine with `npm ci` and `npm run build` before pushing the release. Node.js is not required on the cPanel server.
+### Preferred: point the domain at Laravel's `public` directory
 
-Run these commands from the project directory:
+If cPanel allows changing the document root, set it to:
+
+```text
+/home/CPANEL_USER/apps/worifinance/public
+```
+
+Never use the Laravel project root as the document root.
+
+### If the primary domain is locked to `public_html`
+
+Keep Laravel in the private application directory and publish only the contents of its `public` directory into `/home/CPANEL_USER/public_html`. Do not move the whole Laravel project into `public_html`.
+
+Before changing files, inspect and back up the current document root. Stop if it contains a live site or files that must be kept:
+
+```sh
+DOCROOT=/home/CPANEL_USER/public_html
+APP_DIR=/home/CPANEL_USER/apps/worifinance
+ls -la "$DOCROOT"
+BACKUP="$HOME/public_html.backup.$(date +%Y%m%d-%H%M%S)"
+cp -a "$DOCROOT" "$BACKUP"
+echo "Backup created at $BACKUP"
+```
+
+Copy the Laravel public assets but **exclude `.htaccess`, `index.php`, and `storage`**. This preserves both cPanel's generated PHP handler/INI settings and the custom `index.php` that boots Laravel from outside the web root. The `build/` and `images/` directories are required: Laravel's HTML references CSS, JavaScript, the logo, and project images from these paths. If `rsync` is unavailable, copy `build/`, `images/`, `favicon.ico`, and `robots.txt` in File Manager; do not overwrite `.htaccess`, `index.php`, or an existing `storage` path.
+
+```sh
+rsync -a \
+  --exclude='/.htaccess' \
+  --exclude='/index.php' \
+  --exclude='/storage' \
+  "$APP_DIR/public/" "$DOCROOT/"
+```
+
+Add Laravel's rewrite block to the existing `.htaccess`, leaving all cPanel-generated sections intact:
+
+```apache
+# BEGIN Worifinance Laravel rewrites
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+# END Worifinance Laravel rewrites
+```
+
+Create `/home/CPANEL_USER/public_html/index.php` as the front controller. Update `$appDirectory` to the real private application path:
+
+```php
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
+
+define('LARAVEL_START', microtime(true));
+
+$appDirectory = '/home/CPANEL_USER/apps/worifinance';
+
+if (file_exists($maintenance = $appDirectory.'/storage/framework/maintenance.php')) {
+    require $maintenance;
+}
+
+require $appDirectory.'/vendor/autoload.php';
+
+/** @var Application $app */
+$app = require_once $appDirectory.'/bootstrap/app.php';
+
+$app->handleRequest(Request::capture());
+```
+
+The `public_html` front controller depends on `vendor/autoload.php` being installed in the private application directory. `artisan storage:link` creates a link under `$APP_DIR/public/storage`; when the web document root is `public_html`, create a separate link there so uploaded project images and payment QR images are reachable. Link only Laravel's public upload directory, never the whole private `storage` directory:
+
+```sh
+if [ -L "$DOCROOT/storage" ]; then
+    ls -ld "$DOCROOT/storage"
+elif [ -e "$DOCROOT/storage" ]; then
+    echo "STOP: $DOCROOT/storage already exists and is not a symlink; inspect it before changing anything."
+else
+    ln -s "$APP_DIR/storage/app/public" "$DOCROOT/storage"
+    ls -ld "$DOCROOT/storage"
+fi
+```
+
+The link target should resolve to `$APP_DIR/storage/app/public`. Do not replace or remove an existing `storage` path until you have inspected it.
+
+Verify that the copied assets exist in the actual document root before testing the home page:
+
+```sh
+test -f "$DOCROOT/build/manifest.json" \
+  && echo "Vite manifest is present in public_html" \
+  || echo "STOP: copy Laravel public/build into public_html"
+test -f "$DOCROOT/images/worifinance.jpg" \
+  && echo "Logo is present" \
+  || echo "STOP: copy Laravel public/images into public_html"
+```
+
+If the Vite filename changes in a later release, use the CSS and JavaScript filenames in `$APP_DIR/public/build/manifest.json` to confirm those files also exist under `$DOCROOT/build/assets`. After future releases, copy updated public assets with the same exclusions, preserving the custom front controller and cPanel `.htaccess`.
+
+## 6. Run Laravel setup
+
+Run commands only after `vendor/autoload.php` exists and the PHP 8.5 CLI path is confirmed. The common path is `/usr/local/bin/ea-php85`; the host may provide another one.
 
 ```sh
 cd "$HOME/apps/worifinance"
 PHP_BIN=/usr/local/bin/ea-php85
-composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+"$PHP_BIN" -v
+test -f vendor/autoload.php || { echo "Missing vendor/autoload.php; stop."; exit 1; }
+```
+
+For the **first installation only**:
+
+```sh
 "$PHP_BIN" artisan key:generate
 "$PHP_BIN" artisan optimize:clear
 "$PHP_BIN" artisan migrate --force
@@ -223,9 +288,9 @@ chmod -R u+rwX,g+rwX storage bootstrap/cache
 "$PHP_BIN" artisan view:cache
 ```
 
-Only run `key:generate` for the first install. On later releases, preserve the existing `APP_KEY`; changing it can invalidate encrypted data and sessions. Back up the production database before migrations or any release that changes the schema.
+Back up the production database before migrations. If `storage:link` says the link already exists, verify its target; do not remove an existing path without checking it.
 
-Verify the release:
+Verify Laravel and the production build:
 
 ```sh
 "$PHP_BIN" artisan about
@@ -235,88 +300,96 @@ Verify the release:
 test -f public/build/manifest.json && echo "Vite build manifest is present"
 ```
 
-If `storage:link` reports that the link already exists, verify that `public/storage` points to this application's `storage/app/public`; do not remove an existing path until you have confirmed what it contains. If the host blocks symlinks, configure its supported public-storage mapping.
+If a command fails, stop and resolve the error before continuing. Do not treat blank output as proof of success; check the command's exit code.
 
-### 5. Create the first Super Admin
+## 7. Create the first Super Admin and schedule recurring work
 
-Run the interactive command and enter the administrator's details only at the prompts:
+Create the administrator interactively:
 
 ```sh
 "$PHP_BIN" artisan app:create-super-admin
 ```
 
-Choose a unique email and a password of at least 12 characters containing uppercase and lowercase letters, a number, and a symbol. Never create an administrator through public investor registration.
+Use a unique email and a strong password. Do not create a Super Admin through public investor registration.
 
-### 6. Configure scheduler cron
-
-In cPanel **Cron Jobs**, choose **Once Per Minute** in **Common Settings** (or enter `*` for minute, hour, day, month, and weekday). When cPanel presents separate schedule fields and a **Command** field, put only the command below in **Command**—do not paste the five-field `* * * * *` schedule into the command box. Replace `CPANEL_USER` and the project path. Confirm the PHP binary path with the host first.
-
-Command field:
+In cPanel **Cron Jobs**, choose **Once Per Minute** in Common Settings (or set all five schedule fields to `*`). If the form has a separate Command field, enter only this command there; do not include the five cron schedule fields:
 
 ```sh
 cd /home/CPANEL_USER/apps/worifinance && /usr/local/bin/ea-php85 artisan schedule:run >> /dev/null 2>&1
 ```
 
-If your cron editor accepts a single crontab line instead of separate schedule fields, use this complete line instead:
+If the editor expects a complete crontab line, use:
 
 ```cron
 * * * * * cd /home/CPANEL_USER/apps/worifinance && /usr/local/bin/ea-php85 artisan schedule:run >> /dev/null 2>&1
 ```
 
-The scheduler processes annual account charges daily, including retries for unpaid charges. Without this cron job, scheduled annual charges will not run.
+Confirm the PHP executable path with the host. Without this cron job, scheduled annual account charges will not run.
 
-### 7. Verify the live site and email
+## 8. Verify the live site
 
-1. Open `https://YOUR_DOMAIN` and confirm HTTPS, the home page, project catalogue, English/Bangla switch, and static assets load.
-2. Sign in at `/admin/login`; set platform payment instructions, the BDT/USDT display rate, annual fee, minimum withdrawal, and referral commission as appropriate.
-3. Use **Update password** in the Super Admin panel to set a unique production password.
-4. Sign out and test **Forgot password?** with an account you control. Confirm the reset email arrives, the link uses HTTPS and the correct domain, and the new password works. Do not use real investor accounts for the test.
-5. If the email does not arrive, inspect Laravel logs in `storage/logs`, verify the SMTP host/port/TLS/mailbox settings with the provider, then clear cached configuration and rebuild it:
+1. Open `https://YOUR_DOMAIN`; confirm HTTPS, the home page, project catalogue, English/Bangla switch, and static assets load.
+2. Sign in at `/admin/login`; review the platform fee, currency rate, withdrawal minimum, referral commission, and payment instructions.
+3. Use **Update password** in Super Admin to set a unique production password.
+4. Test password reset with an account you control; verify that the SMTP email arrives and its link uses HTTPS and the correct domain.
+5. Upload and verify the Binance/USDT QR image. Independently verify the receiving wallet and network.
+6. Confirm `artisan schedule:list` shows the annual-charge task and that the cPanel cron entry is active.
 
-   ```sh
-   "$PHP_BIN" artisan optimize:clear
-   "$PHP_BIN" artisan config:cache
-   ```
+If email fails, check Laravel logs under `storage/logs`, verify SMTP settings with the host, and rebuild cached configuration:
 
-6. Upload and verify the Binance/USDT QR image in Super Admin settings. Confirm the exact receiving wallet and network independently before accepting deposits.
-7. Confirm the cron job runs and `"$PHP_BIN" artisan schedule:list` shows the annual-charge task.
+```sh
+"$PHP_BIN" artisan optimize:clear
+"$PHP_BIN" artisan config:cache
+```
 
 ## Updating an existing deployment
 
-Before each release, make a database backup in cPanel **phpMyAdmin → Export** (or use the host's approved `mysqldump` command), and verify that the release's `public/build` directory was built locally and pushed to GitHub.
+For each release:
 
-Then run in cPanel Terminal to update from the deployed `main` branch:
+1. Back up the production database.
+2. Build `vendor-production.zip` and `public/build` locally from the same release commit, as described in step 2.
+3. In cPanel, pull the code update:
 
-```sh
-cd "$HOME/apps/worifinance"
-PHP_BIN=/usr/local/bin/ea-php85
-git status --short --branch
-git pull --ff-only origin main
-composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-"$PHP_BIN" artisan optimize:clear
-"$PHP_BIN" artisan migrate --force
-"$PHP_BIN" artisan config:cache
-"$PHP_BIN" artisan route:cache
-"$PHP_BIN" artisan view:cache
-"$PHP_BIN" artisan about
-"$PHP_BIN" artisan migrate:status
-```
+   ```sh
+   cd "$HOME/apps/worifinance"
+   PHP_BIN=/usr/local/bin/ea-php85
+   git status --short --branch
+   git pull --ff-only origin main
+   ```
 
-Do not overwrite `.env`, regenerate `APP_KEY`, or run development migrations/seeds against production. If the deployment cannot update `public/build` through Git, transfer the locally generated build directory as part of the release before running `view:cache`.
+4. Upload the matching `vendor-production.zip` into the private application directory. Rename the old `vendor` directory before extracting the new one; keep the old directory until verification succeeds.
+5. Verify `vendor/autoload.php`, then run:
 
-## Operational safety
+   ```sh
+   cd "$HOME/apps/worifinance"
+   test -f vendor/autoload.php || { echo "Missing dependencies; stop."; exit 1; }
+   "$PHP_BIN" artisan optimize:clear
+   "$PHP_BIN" artisan migrate --force
+   "$PHP_BIN" artisan config:cache
+   "$PHP_BIN" artisan route:cache
+   "$PHP_BIN" artisan view:cache
+   "$PHP_BIN" artisan about
+   "$PHP_BIN" artisan migrate:status
+   ```
 
-- Keep `APP_DEBUG=false`; restrict write access to `.env`, and never commit or print it.
-- Only `storage` and `bootstrap/cache` need to be writable by the PHP process. Do not use `chmod 777`.
-- Keep database backups secure and test restore procedures before relying on them.
-- Password reset uses Laravel's `password_reset_tokens` table (created by the initial schema migration) and SMTP email. Do not use the `log` mailer in production.
-- Investor/admin password reset requests return the same message whether or not an account exists. Reset tokens expire according to Laravel's `auth.passwords.users` configuration and can only be used once.
-- Super Admin password changes require the current password, record an audit event without recording the password, rotate the remember token, and delete other sessions when the configured session driver is `database`.
-- Public project imagery must be verified and authorized for use. Sample/demo profiles are illustrative and must not be represented as verified properties.
-- Deposit requests are not connected to a bank, payment gateway, or automatic blockchain verification. A Super Admin must independently verify received funds before approval.
-- Investment requests reserve wallet funds and project units until reviewed. Profit distributions require explicit review/approval/posting. Referral commissions require explicit Super Admin credit.
-- Withdrawal payouts are external: verify and send the payout before marking a request paid. No payout is sent automatically.
-- The annual account charge uses available BDT funds only; insufficient balances remain due for retry and do not suspend accounts.
-- Verify the receiving account, wallet address, QR image, network, and payment instructions before publishing. Never place passwords, private keys, or other secrets in public payment instructions.
+6. If the domain is locked to `public_html`, copy updated public assets there while preserving its cPanel `.htaccess` settings and custom Laravel `index.php`.
 
-For system behavior and financial workflow details, see [README.md](./README.md).
+Do not overwrite `.env`, regenerate `APP_KEY`, or run development seeders against production.
+
+## Troubleshooting and operational safety
+
+- **`force-cgi-redirect` browser message:** the web PHP handler is misconfigured. Ask the host to fix the PHP 8.5 handler; this occurs before Laravel executes.
+- **`vendor/autoload.php` missing:** upload and extract `vendor-production.zip` into the private app directory, not `public_html`.
+- **`artisan` exits with an error:** inspect the actual error and exit code. Do not proceed with migrations, admin creation, or caching until Artisan runs successfully.
+- **HTTPS warning:** check AutoSSL / **SSL/TLS Status** for the domain and `www` hostname.
+- **Broken `imap.so` warning:** IMAP is not required by the application. Ask the host to disable or repair the broken extension; password reset uses SMTP.
+- Keep `APP_DEBUG=false`; only `storage` and `bootstrap/cache` need to be writable by PHP. Do not use `chmod 777`.
+- Keep backups secure and test database restore procedures.
+- Password reset requires working SMTP. Reset requests are designed not to reveal whether an account exists; tokens expire and are single-use.
+- Deposit requests are not automatically verified against a payment gateway or blockchain. Super Admin must verify payments before approval.
+- Investment requests reserve funds and units for review. Profit distributions and referral commissions require Super Admin action.
+- Withdrawal payouts are external; verify and send funds before marking a request paid.
+- Annual membership charges use available BDT funds. Insufficient balances remain due for retry and do not suspend accounts.
+- Verify receiving wallet details, network, QR image, and payment instructions before publishing. Never put passwords or private keys in public payment instructions.
+
+For application behavior and financial workflow details, see [README.md](./README.md).
