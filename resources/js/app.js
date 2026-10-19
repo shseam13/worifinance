@@ -157,3 +157,117 @@ document.querySelectorAll('[data-project-gallery]').forEach((gallery) => {
 
     showImage(0);
 });
+
+const heroSlider = document.querySelector('[data-hero-slider]');
+
+if (heroSlider instanceof HTMLElement) {
+    const heroCarousel = heroSlider.closest('.landing-hero');
+    const heroSlides = [...heroSlider.querySelectorAll('[data-hero-slide]')];
+    const heroDots = [...document.querySelectorAll('[data-hero-slide-to]')];
+    const heroToggle = document.querySelector('[data-hero-toggle]');
+    const reducedMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    if (heroCarousel instanceof HTMLElement && heroSlides.length > 1 && heroToggle instanceof HTMLButtonElement) {
+        let activeHeroSlide = 0;
+        let rotationTimer;
+        let userPaused = reducedMotionPreference.matches;
+        let temporarilyPaused = false;
+
+        const stopRotation = () => {
+            window.clearInterval(rotationTimer);
+            rotationTimer = undefined;
+        };
+
+        const startRotation = () => {
+            stopRotation();
+
+            if (userPaused || temporarilyPaused || document.hidden) {
+                return;
+            }
+
+            rotationTimer = window.setInterval(() => {
+                showHeroSlide(activeHeroSlide + 1);
+            }, 6000);
+        };
+
+        const showHeroSlide = (index) => {
+            activeHeroSlide = (index + heroSlides.length) % heroSlides.length;
+
+            heroSlides.forEach((slide, slideIndex) => {
+                const isActive = slideIndex === activeHeroSlide;
+                slide.classList.toggle('is-active', isActive);
+                slide.setAttribute('aria-hidden', String(!isActive));
+            });
+
+            heroDots.forEach((dot, dotIndex) => {
+                if (!(dot instanceof HTMLButtonElement)) {
+                    return;
+                }
+
+                const isActive = dotIndex === activeHeroSlide;
+                dot.classList.toggle('is-active', isActive);
+                dot.setAttribute('aria-pressed', String(isActive));
+            });
+
+            startRotation();
+        };
+
+        const syncToggle = () => {
+            heroToggle.setAttribute('aria-pressed', String(userPaused));
+            heroToggle.setAttribute(
+                'aria-label',
+                userPaused
+                    ? heroToggle.dataset.resumeLabel
+                    : heroToggle.dataset.pauseLabel,
+            );
+            const toggleIcon = heroToggle.querySelector('span');
+            if (toggleIcon instanceof HTMLSpanElement) {
+                toggleIcon.textContent = userPaused ? '▶' : 'Ⅱ';
+            }
+        };
+
+        heroDots.forEach((dot) => {
+            if (!(dot instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            dot.addEventListener('click', () => {
+                const index = Number(dot.dataset.heroSlideTo);
+                if (Number.isInteger(index)) {
+                    showHeroSlide(index);
+                }
+            });
+        });
+
+        heroToggle.addEventListener('click', () => {
+            userPaused = !userPaused;
+            syncToggle();
+            startRotation();
+        });
+
+        heroCarousel.addEventListener('mouseenter', () => {
+            temporarilyPaused = true;
+            stopRotation();
+        });
+        heroCarousel.addEventListener('mouseleave', () => {
+            temporarilyPaused = false;
+            startRotation();
+        });
+        heroCarousel.addEventListener('focusin', () => {
+            temporarilyPaused = true;
+            stopRotation();
+        });
+        heroCarousel.addEventListener('focusout', () => {
+            window.setTimeout(() => {
+                if (!heroCarousel.contains(document.activeElement)) {
+                    temporarilyPaused = false;
+                    startRotation();
+                }
+            });
+        });
+        document.addEventListener('visibilitychange', startRotation);
+
+        syncToggle();
+        startRotation();
+    }
+}

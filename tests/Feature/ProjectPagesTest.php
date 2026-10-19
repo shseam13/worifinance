@@ -23,6 +23,46 @@ class ProjectPagesTest extends TestCase
             ->assertDontSee("Cox's Bazar Coastal Residences");
     }
 
+    public function test_homepage_renders_the_complete_property_landing_page_in_order(): void
+    {
+        $response = $this->get(route('home'))->assertOk();
+        $html = $response->getContent();
+
+        $this->assertIsString($html);
+        $sectionPositions = array_map(
+            fn (string $id): int|false => strpos($html, 'id="'.$id.'"'),
+            ['featured-projects', 'how-it-works', 'about-worifinance'],
+        );
+
+        $this->assertContainsOnly('int', $sectionPositions);
+        $this->assertTrue($sectionPositions[0] < $sectionPositions[1]);
+        $this->assertTrue($sectionPositions[1] < $sectionPositions[2]);
+        $response
+            ->assertSee(__('site.landing.platform_title'))
+            ->assertSee(__('site.landing.features_title'))
+            ->assertSee(__('site.landing.account_title'))
+            ->assertSee(__('site.landing.types_title'))
+            ->assertSee(__('site.landing.risk_notice'));
+    }
+
+    public function test_homepage_carousel_and_project_showcase_use_published_projects_only(): void
+    {
+        $firstProject = $this->createProject('Published Showcase One');
+        $secondProject = $this->createProject('Published Showcase Two');
+        $this->createProject('Hidden Draft Project', 'draft');
+
+        $response = $this->get(route('home'))->assertOk();
+
+        $response
+            ->assertSee('data-hero-slider', false)
+            ->assertSee('data-hero-slide-to="0"', false)
+            ->assertSee('data-hero-slide-to="1"', false)
+            ->assertSee('data-pause-label="'.__('site.landing.pause_slides').'"', false)
+            ->assertSee($firstProject->displayName())
+            ->assertSee($secondProject->displayName())
+            ->assertDontSee('Hidden Draft Project');
+    }
+
     public function test_projects_have_a_readable_project_detail_page(): void
     {
         $project = $this->createProject();

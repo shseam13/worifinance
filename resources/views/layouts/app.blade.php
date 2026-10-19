@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="description" content="@yield('meta_description', __('site.meta_description'))">
-    <meta name="theme-color" content="#f7faf7">
+    <meta name="theme-color" content="#f5faf7">
     <title>@yield('title', __('site.site_name')) | {{ __('site.site_name') }}</title>
     <link rel="icon" type="image/jpeg" href="{{ asset('images/worifinance.jpg') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body>
     <a class="skip-link" href="#main-content">{{ __('site.skip_link') }}</a>
-    <header class="site-header">
+    <header class="site-header {{ request()->routeIs('home') ? 'site-header-home' : '' }}">
         <div class="header-shell">
             <a class="brand" href="{{ route('home') }}" aria-label="{{ __('site.site_name') }} — {{ __('site.nav.home') }}">
                 <span class="brand-mark"><img src="{{ asset('images/worifinance.jpg') }}" alt="" width="44" height="44"></span>
@@ -26,6 +26,7 @@
                 <a class="{{ request()->routeIs('home') ? 'is-active' : '' }}" href="{{ route('home') }}">{{ __('site.nav.home') }}</a>
                 <a class="{{ request()->routeIs('projects.*') ? 'is-active' : '' }}" href="{{ route('projects.index') }}">{{ __('site.nav.projects') }}</a>
                 <a href="{{ route('home') }}#how-it-works">{{ __('site.nav.how_it_works') }}</a>
+                <a href="{{ route('home') }}#about-worifinance">{{ __('site.landing.about_label') }}</a>
                 @auth
                     <a href="{{ auth()->user()->role === 'super_admin' ? route('admin.dashboard') : route('account.dashboard') }}">{{ __('site.auth.dashboard') }}</a>
                 @endauth
@@ -68,7 +69,7 @@
         </nav>
     </header>
 
-    <main id="main-content">
+    <main id="main-content" @if (request()->routeIs('home')) class="landing-main" @endif>
         @yield('content')
     </main>
 
@@ -87,6 +88,7 @@
             <div class="footer-link-group">
                 <h2>{{ __('site.footer.company') }}</h2>
                 <a href="{{ route('home') }}#how-it-works">{{ __('site.nav.how_it_works') }}</a>
+                <a href="{{ route('home') }}#about-worifinance">{{ __('site.landing.about_label') }}</a>
                 <a href="{{ route('home') }}#clarity">{{ __('site.clarity.eyebrow') }}</a>
             </div>
             <div class="footer-link-group">
@@ -119,6 +121,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V8l9-5 9 5v12M3 11h18M8 20v-5h8v5M8 8h.01M12 8h.01M16 8h.01"/></svg>
             <span>{{ __('site.nav.projects') }}</span>
         </a>
+        <a href="{{ route('home') }}#how-it-works">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16M8 5v.01M8 12v.01M8 19v.01"/></svg>
+            <span>{{ __('site.nav.how_it_works') }}</span>
+        </a>
         @auth
             <a href="{{ auth()->user()->role === 'super_admin' ? route('admin.dashboard') : route('account.dashboard') }}">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
@@ -130,13 +136,6 @@
                 <span>{{ __('site.auth.login') }}</span>
             </a>
         @endauth
-        <form action="{{ route('language.update') }}" method="post">
-            @csrf
-            <button type="submit" name="locale" value="{{ app()->getLocale() === 'en' ? 'bn' : 'en' }}" aria-label="{{ __('site.nav.language') }}">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18m0-18a15 15 0 0 0 0 18"/></svg>
-                <span>{{ app()->getLocale() === 'en' ? 'বাংলা' : 'EN' }}</span>
-            </button>
-        </form>
     </nav>
 </body>
 </html>
