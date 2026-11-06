@@ -20,7 +20,7 @@ The application and its `.env`, `vendor`, and `storage` directories must stay ou
 Ask the host to confirm the following before deploying:
 
 - PHP 8.5 is enabled for the domain's web handler and CLI. The CLI PHP binary may be `/usr/local/bin/ea-php85` or another path supplied by the host.
-- Required PHP extensions are enabled: `ctype`, `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip`.
+- Required PHP extensions are enabled for both the CLI binary and the domain's web handler: `ctype`, `curl`, `fileinfo`, `iconv`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `tokenizer`, `xml`, and `zip`.
 - A MariaDB database and database user have been created, with privileges granted to that database. The reported hosting version is MariaDB 10.11.19.
 - HTTPS is enabled for the domain, and an SMTP mailbox is available for password-reset email.
 - Git is available in cPanel Terminal if you plan to clone and update the repository there.
@@ -167,28 +167,49 @@ Never use the Laravel project root as the document root.
 
 Keep Laravel in the private application directory and publish only the contents of its `public` directory into `/home/CPANEL_USER/public_html`. Do not move the whole Laravel project into `public_html`.
 
-Before changing files, inspect and back up the current document root. Stop if it contains a live site or files that must be kept:
+Set the paths first, then inspect and back up the current document root. Stop if it contains a live site or files that must be kept:
 
 ```sh
 DOCROOT=/home/CPANEL_USER/public_html
 APP_DIR=/home/CPANEL_USER/apps/worifinance
+test -d "$APP_DIR/public" || { echo "Laravel public directory not found; check APP_DIR."; exit 1; }
+test -d "$DOCROOT" || { echo "Document root not found; check DOCROOT."; exit 1; }
 ls -la "$DOCROOT"
 BACKUP="$HOME/public_html.backup.$(date +%Y%m%d-%H%M%S)"
 cp -a "$DOCROOT" "$BACKUP"
 echo "Backup created at $BACKUP"
 ```
 
-Copy the Laravel public assets but **exclude `.htaccess`, `index.php`, and `storage`**. This preserves both cPanel's generated PHP handler/INI settings and the custom `index.php` that boots Laravel from outside the web root. The `build/` and `images/` directories are required: Laravel's HTML references CSS, JavaScript, the logo, and project images from these paths. If `rsync` is unavailable, copy `build/`, `images/`, `favicon.ico`, and `robots.txt` in File Manager; do not overwrite `.htaccess`, `index.php`, or an existing `storage` path.
+Copy the Laravel public assets but **exclude `.htaccess`, `index.php`, and `storage`**. This preserves both cPanel's generated PHP handler/INI settings and the custom `index.php` that boots Laravel from outside the web root. The `build/` and `images/` directories are required: Laravel's HTML references CSS, JavaScript, the logo, and project images from these paths.
 
 ```sh
-rsync -a \
-  --exclude='/.htaccess' \
-  --exclude='/index.php' \
-  --exclude='/storage' \
-  "$APP_DIR/public/" "$DOCROOT/"
+if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --exclude='/.htaccess' \
+      --exclude='/index.php' \
+      --exclude='/storage' \
+      "$APP_DIR/public/" "$DOCROOT/"
+else
+    echo "rsync is unavailable; copying required public assets with cp."
+    test -f "$APP_DIR/public/build/manifest.json" || { echo "Build manifest missing; stop."; exit 1; }
+    test -d "$APP_DIR/public/images" || { echo "Images directory missing; stop."; exit 1; }
+    mkdir -p "$DOCROOT/build" "$DOCROOT/images"
+    cp -a "$APP_DIR/public/build/." "$DOCROOT/build/"
+    cp -a "$APP_DIR/public/images/." "$DOCROOT/images/"
+    test ! -f "$APP_DIR/public/favicon.ico" || cp -p "$APP_DIR/public/favicon.ico" "$DOCROOT/"
+    test ! -f "$APP_DIR/public/robots.txt" || cp -p "$APP_DIR/public/robots.txt" "$DOCROOT/"
+fi
+
+test -f "$DOCROOT/build/manifest.json" || { echo "Manifest was not copied; stop."; exit 1; }
+CSS_ASSET=$(grep -o 'assets/[^"]*\.css' "$APP_DIR/public/build/manifest.json" | head -n 1)
+test -n "$CSS_ASSET" && test -f "$DOCROOT/build/$CSS_ASSET" \
+  && echo "CSS asset is present: $CSS_ASSET" \
+  || { echo "CSS asset missing from document root; stop."; exit 1; }
 ```
 
-Add Laravel's rewrite block to the existing `.htaccess`, leaving all cPanel-generated sections intact:
+If running commands manually without the `if` block, do not start with `ls -la "$DOCROOT"` until after setting `DOCROOT`; an unset variable expands to an empty path.
+
+Because this setup uses `public_html` as the domain's document root, add Laravel's rewrite block to **`$DOCROOT/.htaccess`** (for example, `/home/CPANEL_USER/public_html/.htaccess`). Do not add it to `$APP_DIR/public/.htaccess`; that file is not the active document-root rules file in this setup. Preserve all cPanel-generated sections in `public_html/.htaccess` and add the Laravel block alongside them:
 
 ```apache
 # BEGIN Worifinance Laravel rewrites
@@ -372,13 +393,14 @@ For each release:
    "$PHP_BIN" artisan migrate:status
    ```
 
-6. If the domain is locked to `public_html`, copy updated public assets there while preserving its cPanel `.htaccess` settings and custom Laravel `index.php`.
+6. If the domain is locked to `public_html`, repeat the asset-copy command in step 5 using the same `APP_DIR` and `DOCROOT` values. It automatically falls back to `cp` when `rsync` is not installed and checks that the current CSS file referenced by the manifest exists in the document root.
 
 Do not overwrite `.env`, regenerate `APP_KEY`, or run development seeders against production.
 
 ## Troubleshooting and operational safety
 
 - **`force-cgi-redirect` browser message:** the web PHP handler is misconfigured. Ask the host to fix the PHP 8.5 handler; this occurs before Laravel executes.
+- **`Call to undefined function ... iconv()` while bootstrapping Laravel:** ask the host to enable the `iconv` PHP extension for both the PHP 8.5 CLI binary and the domain's web PHP handler. Verify with `/usr/local/bin/ea-php85 -m | grep -i '^iconv$'` (use the actual PHP 8.5 CLI path supplied by the host) before retrying Artisan.
 - **`vendor/autoload.php` missing:** upload and extract `vendor-production.zip` into the private app directory, not `public_html`.
 - **`artisan` exits with an error:** inspect the actual error and exit code. Do not proceed with migrations, admin creation, or caching until Artisan runs successfully.
 - **HTTPS warning:** check AutoSSL / **SSL/TLS Status** for the domain and `www` hostname.

@@ -16,11 +16,11 @@
                 @error('email') <span class="auth-error">{{ $message }}</span> @enderror
 
                 <label for="password">{{ __('site.auth.password') }}</label>
-                <input id="password" name="password" type="password" autocomplete="new-password" required>
+                <x-password-input id="password" name="password" autocomplete="new-password" />
                 @error('password') <span class="auth-error">{{ $message }}</span> @enderror
 
                 <label for="password_confirmation">{{ __('site.auth.confirm_password') }}</label>
-                <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" required>
+                <x-password-input id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
                 <button class="button button-dark auth-submit" type="submit">{{ __('site.password_reset.reset_password') }} <span aria-hidden="true">→</span></button>
             </form>
         </div>

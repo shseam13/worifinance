@@ -166,6 +166,11 @@ class InvestmentManagementController extends Controller
             return;
         }
 
+        $commissionType = DB::table('platform_settings')
+            ->where('key', 'platform.referral_commission_type')
+            ->orderByDesc('version')
+            ->lockForUpdate()
+            ->value('value') ?? 'percentage';
         $setting = DB::table('platform_settings')
             ->where('key', 'platform.referral_commission_percent')
             ->orderByDesc('version')
@@ -175,10 +180,12 @@ class InvestmentManagementController extends Controller
             return;
         }
 
-        $amount = DB::selectOne(
-            'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) / 100, 2) AS CHAR) AS amount',
-            [$investment->amount_bdt, $setting->value],
-        )?->amount;
+        $amount = $commissionType === 'fixed'
+            ? $setting->value
+            : DB::selectOne(
+                'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) / 100, 2) AS CHAR) AS amount',
+                [$investment->amount_bdt, $setting->value],
+            )?->amount;
         if ($amount === null || ! is_numeric($amount)) {
             throw new \RuntimeException('Unable to calculate the referral commission.');
         }
@@ -190,7 +197,9 @@ class InvestmentManagementController extends Controller
             'referrer_user_id' => $referrerId,
             'referred_user_id' => $investment->user_id,
             'investment_id' => $investment->id,
-            'commission_rate_snapshot' => $setting->value,
+            'commission_rate_snapshot' => $commissionType === 'fixed' ? '0.0000' : $setting->value,
+            'commission_type_snapshot' => $commissionType,
+            'commission_value_snapshot' => $setting->value,
             'basis_amount_bdt' => $investment->amount_bdt,
             'commission_amount_bdt' => $amount,
             'status' => 'pending',
@@ -209,7 +218,9 @@ class InvestmentManagementController extends Controller
                 'referrer_user_id' => $referrerId,
                 'referred_user_id' => $investment->user_id,
                 'basis_amount_bdt' => $investment->amount_bdt,
-                'commission_rate_snapshot' => $setting->value,
+                'commission_rate_snapshot' => $commissionType === 'fixed' ? '0.0000' : $setting->value,
+                'commission_type_snapshot' => $commissionType,
+                'commission_value_snapshot' => $setting->value,
                 'commission_amount_bdt' => $amount,
                 'status' => 'pending',
             ], JSON_THROW_ON_ERROR),

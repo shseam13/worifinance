@@ -13,10 +13,14 @@ class ReferralManagementController extends Controller
 {
     public function index(): View
     {
-        $currentRate = DB::table('platform_settings')
+        $currentCommissionValue = DB::table('platform_settings')
             ->where('key', 'platform.referral_commission_percent')
             ->orderByDesc('version')
             ->value('value');
+        $currentCommissionType = DB::table('platform_settings')
+            ->where('key', 'platform.referral_commission_type')
+            ->orderByDesc('version')
+            ->value('value') ?? 'percentage';
 
         $referredInvestmentTotals = DB::table('investments')
             ->select('user_id', DB::raw('SUM(amount_bdt) as confirmed_bdt'), DB::raw('COUNT(*) as confirmed_count'))
@@ -56,7 +60,8 @@ class ReferralManagementController extends Controller
             'pendingDeposits' => DB::table('deposit_requests')->where('status', 'pending')->count(),
             'pendingWithdrawals' => DB::table('withdrawal_requests')->where('status', 'pending')->count(),
             'referrers' => $referrers,
-            'currentRate' => $currentRate ?? '0',
+            'currentCommissionValue' => $currentCommissionValue ?? '0',
+            'currentCommissionType' => $currentCommissionType,
             'pendingCommissionItems' => DB::table('referral_commissions')
                 ->join('users as referrers', 'referrers.id', '=', 'referral_commissions.referrer_user_id')
                 ->join('users as referred_users', 'referred_users.id', '=', 'referral_commissions.referred_user_id')
@@ -136,6 +141,8 @@ class ReferralManagementController extends Controller
                     'investment_id' => $record->investment_id,
                     'referred_user_id' => $record->referred_user_id,
                     'commission_rate_snapshot' => $record->commission_rate_snapshot,
+                    'commission_type_snapshot' => $record->commission_type_snapshot,
+                    'commission_value_snapshot' => $record->commission_value_snapshot,
                     'basis_amount_bdt' => $record->basis_amount_bdt,
                 ], JSON_THROW_ON_ERROR),
                 'created_by_user_id' => $request->user()->id,

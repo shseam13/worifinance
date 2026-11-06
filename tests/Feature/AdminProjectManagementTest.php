@@ -59,6 +59,38 @@ class AdminProjectManagementTest extends TestCase
             ->assertSee('data-gallery-thumbnail');
     }
 
+    public function test_admin_can_upload_project_images_over_five_megabytes(): void
+    {
+        Storage::fake('public');
+
+        $this->actingAs($this->admin())
+            ->post(route('admin.projects.store'), [
+                ...$this->projectData(),
+                'status' => 'draft',
+                'cover_image' => $this->image('large-cover.png', 6 * 1024),
+                'gallery' => [$this->image('large-gallery.png', 6 * 1024)],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseCount('project_images', 2);
+        Storage::disk('public')->assertExists(Project::query()->firstOrFail()->primaryImage()->firstOrFail()->path);
+    }
+
+    public function test_admin_cannot_upload_project_images_over_twenty_megabytes(): void
+    {
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.create'))
+            ->post(route('admin.projects.store'), [
+                ...$this->projectData(),
+                'status' => 'draft',
+                'cover_image' => $this->image('oversized-cover.png', (20 * 1024) + 1),
+                'gallery' => [$this->image('oversized-gallery.png', (20 * 1024) + 1)],
+            ])
+            ->assertSessionHasErrors(['cover_image', 'gallery.0']);
+
+        $this->assertDatabaseCount('projects', 0);
+    }
+
     public function test_admin_can_enable_and_hide_original_illustrative_demo_projects(): void
     {
         $this->actingAs($this->admin())
@@ -340,7 +372,7 @@ class AdminProjectManagementTest extends TestCase
         ];
     }
 
-    private function image(string $name): UploadedFile
+    private function image(string $name, ?int $sizeKilobytes = null): UploadedFile
     {
         $content = base64_decode(
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aWQAAAAASUVORK5CYII=',
@@ -351,6 +383,12 @@ class AdminProjectManagementTest extends TestCase
             throw new \LogicException('Invalid PNG test fixture.');
         }
 
-        return UploadedFile::fake()->createWithContent($name, $content);
+        $image = UploadedFile::fake()->createWithContent($name, $content);
+
+        if ($sizeKilobytes !== null) {
+            $image->size($sizeKilobytes);
+        }
+
+        return $image;
     }
 }

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', __('site.site_name').' — '.__('site.hero.title_before'))
+@section('title', __('site.site_name').' — '.$homepage['hero']['title_before'])
 
 @section('content')
     @php($spotlightProject = $projects->first())
@@ -8,30 +8,26 @@
     <div class="landing-page">
         <section class="landing-hero" aria-labelledby="landing-title">
             <div class="landing-hero-slides" data-hero-slider aria-label="{{ __('site.landing.carousel_label') }}">
-                @forelse ($projects as $heroProject)
-                    <div class="landing-hero-slide {{ $loop->first ? 'is-active' : '' }}" data-hero-slide role="group" aria-roledescription="slide" aria-label="{{ $loop->iteration }} / {{ $projects->count() }}: {{ $heroProject->displayName() }}" aria-hidden="{{ $loop->first ? 'false' : 'true' }}">
+                @foreach ($heroSlides as $heroSlide)
+                    <div class="landing-hero-slide {{ $loop->first ? 'is-active' : '' }}" data-hero-slide role="group" aria-roledescription="slide" aria-label="{{ __('site.landing.slide_label', ['number' => $loop->iteration]) }}" aria-hidden="{{ $loop->first ? 'false' : 'true' }}">
                         <img
                             class="landing-hero-image"
-                            src="{{ $heroProject->primaryImage?->url() ?? asset('images/projects/urban-commercial.svg') }}"
-                            alt="{{ $heroProject->displayName() }}"
+                            src="{{ $heroSlide['url'] }}"
+                            alt="{{ $heroSlide['alt'] ?? __('site.hero.image_alt') }}"
                             @if ($loop->first) fetchpriority="high" @else loading="lazy" @endif
                         >
                     </div>
-                @empty
-                    <div class="landing-hero-slide is-active" data-hero-slide role="group" aria-roledescription="slide" aria-label="{{ __('site.hero.image_alt') }}" aria-hidden="false">
-                        <img class="landing-hero-image" src="{{ asset('images/projects/urban-commercial.svg') }}" alt="{{ __('site.hero.image_alt') }}" fetchpriority="high">
-                    </div>
-                @endforelse
+                @endforeach
             </div>
             <div class="landing-hero-shade" aria-hidden="true"></div>
             <div class="landing-hero-content">
-                <span class="landing-kicker"><span></span>{{ __('site.hero.eyebrow') }}</span>
+                <span class="landing-kicker"><span></span>{{ $homepage['hero']['eyebrow'] }}</span>
                 <h1 id="landing-title">
-                    {{ __('site.hero.title_before') }}<br>
-                    <span>{{ __('site.hero.title_accent') }}</span><br>
-                    {{ __('site.hero.title_after') }}
+                    {{ $homepage['hero']['title_before'] }}<br>
+                    <span>{{ $homepage['hero']['title_accent'] }}</span><br>
+                    {{ $homepage['hero']['title_after'] }}
                 </h1>
-                <p>{{ __('site.hero.description') }}</p>
+                <p>{{ $homepage['hero']['description'] }}</p>
                 <div class="landing-hero-actions">
                     <a class="landing-button landing-button-primary" href="{{ route('projects.index') }}">
                         {{ __('site.actions.explore') }} <span aria-hidden="true">↗</span>
@@ -44,12 +40,12 @@
                 </div>
                 <div class="landing-hero-note">
                     <span class="landing-check" aria-hidden="true">✓</span>
-                    <span>{{ __('site.hero.trust') }}</span>
+                    <span>{{ $homepage['hero']['trust'] }}</span>
                 </div>
-                @if ($projects->count() > 1)
+                @if (count($heroSlides) > 1)
                     <div class="landing-hero-controls" aria-label="{{ __('site.landing.carousel_label') }}">
                         <div class="landing-hero-dots">
-                            @foreach ($projects as $heroProject)
+                            @foreach ($heroSlides as $heroSlide)
                                 <button
                                     class="landing-hero-dot {{ $loop->first ? 'is-active' : '' }}"
                                     type="button"
@@ -82,7 +78,7 @@
                     <small>{{ __('site.landing.platform_point_two') }}</small>
                 </div>
             </div>
-            <div class="landing-hero-caption">{{ __('site.hero.caption') }}</div>
+            <div class="landing-hero-caption">{{ $homepage['hero']['caption'] }}</div>
         </section>
 
         @if ($spotlightProject)
@@ -236,14 +232,14 @@
 
         <section class="landing-process" id="how-it-works" aria-labelledby="steps-title">
             <div class="landing-process-copy">
-                <span class="landing-eyebrow">{{ __('site.landing.steps_label') }}</span>
-                <h2 id="steps-title">{{ __('site.landing.steps_title') }}</h2>
-                <p>{{ __('site.landing.steps_description') }}</p>
+                <span class="landing-eyebrow">{{ $homepage['how_it_works']['label'] }}</span>
+                <h2 id="steps-title">{{ $homepage['how_it_works']['title'] }}</h2>
+                <p>{{ $homepage['how_it_works']['description'] }}</p>
                 <ol class="landing-step-list">
                     @foreach (range(1, 3) as $number)
                         <li>
                             <span class="landing-step-number">0{{ $number }}</span>
-                            <div><h3>{{ __("site.landing.step_{$number}_title") }}</h3><p>{{ __("site.landing.step_{$number}_description") }}</p></div>
+                            <div><h3>{{ $homepage['how_it_works']["step_{$number}_title"] }}</h3><p>{{ $homepage['how_it_works']["step_{$number}_description"] }}</p></div>
                         </li>
                     @endforeach
                 </ol>
@@ -281,9 +277,9 @@
                 <span class="landing-about-mark"><img src="{{ asset('images/worifinance.jpg') }}" alt="" loading="lazy"></span>
             </div>
             <div class="landing-about-copy">
-                <span class="landing-eyebrow">{{ __('site.landing.about_label') }}</span>
-                <h2 id="about-title">{{ __('site.landing.about_title') }}</h2>
-                <p>{{ __('site.landing.about_description') }}</p>
+                <span class="landing-eyebrow">{{ $homepage['about']['label'] }}</span>
+                <h2 id="about-title">{{ $homepage['about']['title'] }}</h2>
+                <p>{{ $homepage['about']['description'] }}</p>
                 <a class="landing-text-link" href="{{ route('projects.index') }}">{{ __('site.actions.explore') }} <span aria-hidden="true">↗</span></a>
             </div>
         </section>

@@ -20,19 +20,19 @@
             <form class="admin-form-grid" action="{{ route('admin.password.update') }}" method="post">
                 @csrf
                 @method('put')
-                <label class="admin-form-field admin-form-field-wide">
-                    <span>{{ __('site.admin_password.current_password') }}</span>
-                    <input name="current_password" type="password" autocomplete="current-password" required>
-                </label>
-                <label class="admin-form-field admin-form-field-wide">
-                    <span>{{ __('site.admin_password.new_password') }}</span>
-                    <input name="password" type="password" autocomplete="new-password" required>
+                <div class="admin-form-field admin-form-field-wide">
+                    <label for="current_password">{{ __('site.admin_password.current_password') }}</label>
+                    <x-password-input id="current_password" name="current_password" autocomplete="current-password" />
+                </div>
+                <div class="admin-form-field admin-form-field-wide">
+                    <label for="password">{{ __('site.admin_password.new_password') }}</label>
+                    <x-password-input id="password" name="password" autocomplete="new-password" />
                     <small>{{ __('site.admin_password.password_help') }}</small>
-                </label>
-                <label class="admin-form-field admin-form-field-wide">
-                    <span>{{ __('site.admin_password.confirm_password') }}</span>
-                    <input name="password_confirmation" type="password" autocomplete="new-password" required>
-                </label>
+                </div>
+                <div class="admin-form-field admin-form-field-wide">
+                    <label for="password_confirmation">{{ __('site.admin_password.confirm_password') }}</label>
+                    <x-password-input id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
+                </div>
                 <div class="admin-form-actions admin-form-field-wide">
                     <button class="button button-dark" type="submit">{{ __('site.admin_password.update_password') }}</button>
                 </div>

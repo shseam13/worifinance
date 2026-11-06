@@ -104,6 +104,23 @@
                     <span aria-hidden="true">|</span>
                     <button type="submit" name="locale" value="bn" lang="bn" @if (app()->getLocale() === 'bn') aria-current="true" @endif>বাংলা</button>
                 </form>
+                @if ($socialLinks !== [])
+                    <div class="footer-social">
+                        <h2>{{ __('site.footer.community') }}</h2>
+                        <div class="footer-social-links">
+                            @foreach ($socialLinks as $socialLink)
+                                <a href="{{ $socialLink['url'] }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $socialLink['label'] }}">
+                                    @if ($socialLink['icon_url'])
+                                        <img src="{{ $socialLink['icon_url'] }}" alt="">
+                                    @else
+                                        <span class="footer-social-fallback" aria-hidden="true">{{ mb_substr($socialLink['label'], 0, 1) }}</span>
+                                    @endif
+                                    <span>{{ $socialLink['label'] }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
         <div class="footer-bottom">

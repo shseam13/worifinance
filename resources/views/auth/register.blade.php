@@ -23,12 +23,27 @@
                 <input id="phone" name="phone" type="tel" value="{{ old('phone') }}" autocomplete="tel">
                 @error('phone') <span class="auth-error">{{ $message }}</span> @enderror
 
+                <label for="referral_code">{{ __('site.auth.referral_code') }}</label>
+                <input id="referral_code" name="referral_code" type="text" value="{{ old('referral_code', $referralCode) }}" maxlength="32" autocomplete="off">
+                @error('referral_code') <span class="auth-error">{{ $message }}</span> @enderror
+
                 <label for="password">{{ __('site.auth.password') }}</label>
-                <input id="password" name="password" type="password" autocomplete="new-password" required>
+                <x-password-input id="password" name="password" autocomplete="new-password" />
                 @error('password') <span class="auth-error">{{ $message }}</span> @enderror
 
                 <label for="password_confirmation">{{ __('site.auth.confirm_password') }}</label>
-                <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" required>
+                <x-password-input id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
+                <input type="hidden" name="terms_version" value="{{ $terms['version'] }}">
+                <section class="auth-terms" id="terms-and-conditions" aria-labelledby="terms-title">
+                    <h2 id="terms-title">{{ __('site.auth.terms_title') }}</h2>
+                    <p class="auth-terms-content">{{ $terms['content'] }}</p>
+                    <label class="auth-terms-agreement" for="terms_accepted">
+                        <input id="terms_accepted" name="terms_accepted" type="checkbox" value="1" required @checked(old('terms_accepted') && (string) old('terms_version') === (string) $terms['version'])>
+                        <span>{{ __('site.auth.terms_agreement') }}</span>
+                    </label>
+                    @error('terms_accepted') <span class="auth-error">{{ $message }}</span> @enderror
+                    @error('terms_version') <span class="auth-error">{{ $message }}</span> @enderror
+                </section>
                 <button class="button button-dark auth-submit" type="submit">{{ __('site.auth.create_account') }} <span aria-hidden="true">→</span></button>
             </form>
 

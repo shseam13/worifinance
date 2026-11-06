@@ -19,7 +19,7 @@
                 @error('email') <span class="auth-error">{{ $message }}</span> @enderror
 
                 <label for="password">{{ __('site.auth.password') }}</label>
-                <input id="password" name="password" type="password" autocomplete="current-password" required>
+                <x-password-input id="password" name="password" autocomplete="current-password" />
                 @error('password') <span class="auth-error">{{ $message }}</span> @enderror
                 <p class="auth-switch"><a href="{{ route('password.request') }}">{{ __('site.password_reset.forgot_password') }}</a></p>
 

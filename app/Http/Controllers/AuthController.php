@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\SiteContent;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -25,13 +27,14 @@ class AuthController extends Controller
         return view('auth.login', ['portal' => 'admin']);
     }
 
-    public function showRegistration(): View
+    public function showRegistration(SiteContent $siteContent): View
     {
         $referralCode = request()->query('ref');
+        $resolvedReferralCode = null;
 
         if (is_string($referralCode)) {
             $referrer = User::query()
-                ->where('referral_code', $referralCode)
+                ->where('referral_code', Str::upper(trim($referralCode)))
                 ->where('role', 'investor')
                 ->where('status', 'active')
                 ->first();
@@ -39,12 +42,16 @@ class AuthController extends Controller
             if ($referrer !== null) {
                 $this->ensureReferralCode($referrer);
                 request()->session()->put('referrer_user_id', $referrer->id);
+                $resolvedReferralCode = $referrer->referral_code;
             } else {
                 request()->session()->forget('referrer_user_id');
             }
         }
 
-        return view('auth.register');
+        return view('auth.register', [
+            'terms' => $siteContent->termsForLocale(app()->getLocale()),
+            'referralCode' => $resolvedReferralCode,
+        ]);
     }
 
     public function login(Request $request): RedirectResponse
@@ -57,26 +64,51 @@ class AuthController extends Controller
         return $this->authenticate($request, 'admin');
     }
 
-    public function register(Request $request): RedirectResponse
+    public function register(Request $request, SiteContent $siteContent): RedirectResponse
     {
+        $request->merge([
+            'referral_code' => is_string($request->input('referral_code'))
+                ? Str::upper(trim($request->input('referral_code')))
+                : $request->input('referral_code'),
+        ]);
+        $terms = $siteContent->termsForLocale(app()->getLocale());
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['nullable', 'string', 'max:32', 'unique:users,phone'],
             'password' => ['required', 'confirmed', Password::min(10)->letters()->numbers()],
+            'referral_code' => [
+                'nullable',
+                'string',
+                'max:32',
+                Rule::exists('users', 'referral_code')
+                    ->where('role', 'investor')
+                    ->where('status', 'active'),
+            ],
+            'terms_accepted' => ['required', 'accepted'],
+            'terms_version' => ['required', 'integer', Rule::in([(string) $terms['version']])],
+        ], [
+            'referral_code.exists' => __('site.auth.referral_code_invalid'),
+            'terms_version.in' => __('site.auth.terms_updated'),
         ]);
 
         $validated['email'] = Str::lower($validated['email']);
-        $referrer = User::query()
-            ->whereKey($request->session()->pull('referrer_user_id'))
+        $termsVersion = (int) $validated['terms_version'];
+        $manualReferralCode = $validated['referral_code'] ?? null;
+        unset($validated['terms_accepted'], $validated['terms_version'], $validated['referral_code']);
+        $referrerQuery = User::query()
             ->where('role', 'investor')
-            ->where('status', 'active')
-            ->first();
-        $user = DB::transaction(function () use ($validated, $referrer): User {
+            ->where('status', 'active');
+        $referrer = is_string($manualReferralCode)
+            ? $referrerQuery->where('referral_code', $manualReferralCode)->first()
+            : $referrerQuery->whereKey($request->session()->pull('referrer_user_id'))->first();
+        $user = DB::transaction(function () use ($validated, $referrer, $termsVersion): User {
             $user = User::query()->create($validated);
             $user->forceFill([
                 'referral_code' => $this->newReferralCode(),
                 'referred_by_user_id' => $referrer?->id,
+                'terms_accepted_version' => $termsVersion,
+                'terms_accepted_at' => now(),
             ])->save();
 
             return $user;

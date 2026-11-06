@@ -14,9 +14,20 @@ class AuthPagesTest extends TestCase
 
     public function test_login_registration_and_admin_login_pages_are_available(): void
     {
-        $this->get(route('login'))->assertOk()->assertSee('Welcome back.');
-        $this->get(route('admin.login'))->assertOk()->assertSee('Super Admin login');
-        $this->get(route('register'))->assertOk()->assertSee('Create investor account');
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('Welcome back.')
+            ->assertSee('data-password-toggle', false);
+        $this->get(route('admin.login'))
+            ->assertOk()
+            ->assertSee('Super Admin login')
+            ->assertSee('data-password-toggle', false);
+        $this->get(route('register'))
+            ->assertOk()
+            ->assertSee('Create investor account')
+            ->assertSee('Terms and conditions')
+            ->assertSee('name="terms_accepted"', false)
+            ->assertSee('data-password-toggle', false);
     }
 
     public function test_registration_creates_only_an_investor_account_and_logs_them_in(): void
@@ -27,6 +38,8 @@ class AuthPagesTest extends TestCase
             'phone' => '01234567890',
             'password' => 'investor-password-2026',
             'password_confirmation' => 'investor-password-2026',
+            'terms_accepted' => '1',
+            'terms_version' => '0',
             'role' => 'super_admin',
             'status' => 'active',
         ]);
@@ -37,9 +50,48 @@ class AuthPagesTest extends TestCase
 
         $this->assertSame('investor', $user->role);
         $this->assertSame('01234567890', $user->phone);
+        $this->assertSame(0, $user->terms_accepted_version);
+        $this->assertNotNull($user->terms_accepted_at);
         $this->assertAuthenticatedAs($user);
         $this->get(route('account.dashboard'))->assertOk()->assertSee('Your investor workspace');
         $this->get(route('admin.dashboard'))->assertForbidden();
+    }
+
+    public function test_registration_requires_terms_agreement(): void
+    {
+        $this->from(route('register'))
+            ->post(route('register.store'), [
+                'name' => 'Test Investor',
+                'email' => 'investor@example.test',
+                'password' => 'investor-password-2026',
+                'password_confirmation' => 'investor-password-2026',
+                'terms_version' => '0',
+            ])
+            ->assertRedirect(route('register'))
+            ->assertSessionHasErrors('terms_accepted');
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertGuest();
+    }
+
+    public function test_registration_rejects_agreement_to_an_outdated_terms_version(): void
+    {
+        $this->from(route('register'))
+            ->post(route('register.store'), [
+                'name' => 'Test Investor',
+                'email' => 'investor@example.test',
+                'password' => 'investor-password-2026',
+                'password_confirmation' => 'investor-password-2026',
+                'terms_accepted' => '1',
+                'terms_version' => '1',
+            ])
+            ->assertRedirect(route('register'))
+            ->assertSessionHasErrors([
+                'terms_version' => __('site.auth.terms_updated'),
+            ]);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertGuest();
     }
 
     public function test_investors_cannot_use_the_super_admin_login_portal(): void

@@ -323,9 +323,9 @@ class ProjectManagementController extends Controller
             'estimated_return_max_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,4})?$/'],
             'effective_from' => ['required', 'date'],
             'status' => ['required', Rule::in(['draft', 'published', 'archived'])],
-            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
             'gallery' => ['nullable', 'array', 'max:8'],
-            'gallery.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'gallery.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
             'delete_images' => ['sometimes', 'array'],
             'delete_images.*' => [
                 'required',

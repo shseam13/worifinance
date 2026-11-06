@@ -21,7 +21,7 @@
             <article class="portal-stat-card"><span>{{ __('site.admin_referrals.referred_accounts') }}</span><strong>{{ number_format($totalReferred) }}</strong><small>{{ __('site.admin_referrals.referred_help') }}</small></article>
             <article class="portal-stat-card"><span>{{ __('site.admin_referrals.pending_commissions') }}</span><strong>@money($pendingCommissions, 'BDT')</strong><small>{{ __('site.admin_referrals.pending_help') }}</small></article>
             <article class="portal-stat-card"><span>{{ __('site.admin_referrals.credited_commissions') }}</span><strong>@money($creditedCommissions, 'BDT')</strong><small>{{ __('site.admin_referrals.credited_help') }}</small></article>
-            <article class="portal-stat-card"><span>{{ __('site.admin_referrals.current_rate') }}</span><strong>{{ number_format((float) $currentRate, 4) }}%</strong><small>{{ __('site.admin_referrals.rate_help') }}</small></article>
+            <article class="portal-stat-card"><span>{{ __('site.admin_referrals.current_rate') }}</span><strong>@if ($currentCommissionType === 'fixed') @money($currentCommissionValue, 'BDT') @else {{ number_format((float) $currentCommissionValue, 4) }}% @endif</strong><small>{{ __('site.admin_referrals.rate_help') }}</small></article>
         </div>
         <div class="portal-notice">
             <div><h2>{{ __('site.admin_referrals.no_payout_title') }}</h2><p>{{ __('site.admin_referrals.no_payout_notice') }}</p></div>
@@ -41,7 +41,13 @@
                                     <td><span class="table-primary">{{ $commission->referred_name }}</span><span class="table-secondary">{{ $commission->referred_email }}</span></td>
                                     <td>{{ app()->getLocale() === 'bn' && $commission->project_name_bn ? $commission->project_name_bn : $commission->project_name }}</td>
                                     <td>@money($commission->basis_amount_bdt, 'BDT')</td>
-                                    <td>{{ number_format((float) $commission->commission_rate_snapshot, 4) }}%</td>
+                                    <td>
+                                        @if ($commission->commission_type_snapshot === 'fixed')
+                                            @money($commission->commission_value_snapshot ?? $commission->commission_rate_snapshot, 'BDT')
+                                        @else
+                                            {{ number_format((float) ($commission->commission_value_snapshot ?? $commission->commission_rate_snapshot), 4) }}%
+                                        @endif
+                                    </td>
                                     <td>@money($commission->commission_amount_bdt, 'BDT')</td>
                                     <td>{{ \Illuminate\Support\Carbon::parse($commission->created_at)->format('M j, Y H:i') }}</td>
                                     <td>

@@ -200,6 +200,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
             ->assertOk()
             ->assertSee($referrer->email)
             ->assertSee($referredInvestor->email)
+            ->assertSee('5.0000%')
             ->assertSee('Credit BDT wallet');
 
         $this->post(route('admin.referrals.credit', $commission->id), ['decision' => 'credit'])
@@ -227,6 +228,67 @@ class InvestmentAndProfitDistributionTest extends TestCase
         $this->post(route('admin.referrals.credit', $commission->id), ['decision' => 'credit'])
             ->assertStatus(409);
         $this->assertDatabaseCount('ledger_transactions', 3);
+    }
+
+    public function test_confirmed_referred_investment_creates_a_fixed_bdt_commission_snapshot(): void
+    {
+        $admin = $this->admin();
+        $referrer = $this->investor();
+        $referredInvestor = $this->investor();
+        $referredInvestor->forceFill(['referred_by_user_id' => $referrer->id])->save();
+        $project = $this->project();
+        $this->wallet($referredInvestor, 'BDT', '2000.00');
+        DB::table('platform_settings')->insert([
+            [
+                'key' => 'platform.referral_commission_type',
+                'version' => 1,
+                'value' => 'fixed',
+                'effective_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'key' => 'platform.referral_commission_percent',
+                'version' => 1,
+                'value' => '125.50',
+                'effective_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($referredInvestor)->post(route('account.projects.invest.store', $project), [
+            'units' => 1,
+            'currency' => 'BDT',
+        ])->assertRedirect(route('account.dashboard'));
+        $investmentId = (int) DB::table('investments')->value('id');
+
+        $this->actingAs($admin)->post(route('admin.investments.review', $investmentId), [
+            'decision' => 'confirmed',
+        ])->assertRedirect(route('admin.investments.index'));
+
+        $commission = DB::table('referral_commissions')->first();
+        $this->assertNotNull($commission);
+        $this->assertDatabaseHas('referral_commissions', [
+            'id' => $commission->id,
+            'commission_type_snapshot' => 'fixed',
+            'commission_value_snapshot' => '125.5000',
+            'commission_amount_bdt' => '125.50',
+            'status' => 'pending',
+        ]);
+
+        $this->get(route('admin.referrals.index'))
+            ->assertOk()
+            ->assertSee('125.50 BDT');
+
+        $this->post(route('admin.referrals.credit', $commission->id), ['decision' => 'credit'])
+            ->assertRedirect(route('admin.referrals.index'));
+
+        $this->assertDatabaseHas('wallet_accounts', [
+            'user_id' => $referrer->id,
+            'currency' => 'BDT',
+            'balance' => '125.50000000',
+        ]);
     }
 
     public function test_profit_distribution_uses_saved_rate_and_snapshot_and_posts_once(): void

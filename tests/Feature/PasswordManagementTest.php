@@ -15,6 +15,23 @@ class PasswordManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_reset_and_super_admin_password_forms_include_visibility_controls(): void
+    {
+        $this->get(route('password.reset', [
+            'token' => 'display-token',
+            'email' => 'investor@example.test',
+        ]))
+            ->assertOk()
+            ->assertSee('data-password-toggle', false);
+
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'super_admin', 'status' => 'active'])->save();
+        $this->actingAs($admin)
+            ->get(route('admin.password.edit'))
+            ->assertOk()
+            ->assertSee('data-password-toggle', false);
+    }
+
     public function test_login_pages_link_to_a_non_enumerating_password_reset_form(): void
     {
         $this->get(route('login'))

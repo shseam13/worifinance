@@ -127,6 +127,48 @@ class ProjectPagesTest extends TestCase
             ->assertDontSee('not-a-published-project');
     }
 
+    public function test_project_directory_filters_by_search_category_and_budget(): void
+    {
+        $matchingProject = $this->createProject('Dhaka Lakeside', 'published', 'Commercial', 'Dhaka');
+        $otherCategory = $this->createProject('Dhaka Garden Homes', 'published', 'Residential', 'Dhaka');
+        $otherBudget = $this->createProject('Dhaka Business Tower', 'published', 'Commercial', 'Dhaka');
+        $this->createProject('Hidden Dhaka Commercial', 'draft', 'Commercial', 'Dhaka');
+        $this->addProjectTerm($matchingProject, '15000.00');
+        $this->addProjectTerm($matchingProject, '7500.00', 2);
+        $this->addProjectTerm($otherCategory, '7500.00');
+        $this->addProjectTerm($otherBudget, '15000.00');
+
+        $this->get(route('projects.index', [
+            'q' => 'Dhaka',
+            'category' => 'Commercial',
+            'budget' => '5000_10000',
+        ]))
+            ->assertOk()
+            ->assertSee('Dhaka Lakeside')
+            ->assertDontSee('Dhaka Garden Homes')
+            ->assertDontSee('Dhaka Business Tower')
+            ->assertDontSee('Hidden Dhaka Commercial')
+            ->assertSee('name="q"', false)
+            ->assertSee('value="Commercial" selected', false)
+            ->assertSee('value="5000_10000" selected', false);
+    }
+
+    public function test_project_directory_uses_a_published_cover_image_for_its_hero(): void
+    {
+        $project = $this->createProject('Featured Dhaka Property');
+        $cover = $project->images()->make();
+        $cover->forceFill([
+            'path' => 'projects/featured-cover.png',
+            'alt_text' => 'Featured Dhaka Property',
+            'sort_order' => 0,
+            'is_primary' => true,
+        ])->save();
+
+        $this->get(route('projects.index'))
+            ->assertOk()
+            ->assertSee($cover->url(), false);
+    }
+
     public function test_language_can_be_switched_to_bengali(): void
     {
         $this->from(route('home'))
@@ -153,15 +195,19 @@ class ProjectPagesTest extends TestCase
         $this->get('/projects/not-a-published-project')->assertNotFound();
     }
 
-    private function createProject(string $name = 'Verified Property', string $status = 'published'): Project
-    {
+    private function createProject(
+        string $name = 'Verified Property',
+        string $status = 'published',
+        string $category = 'Residential',
+        string $location = 'Verified location',
+    ): Project {
         $project = new Project;
         $project->forceFill([
             'slug' => Str::slug($name),
             'name' => $name,
-            'category' => 'Residential',
+            'category' => $category,
             'project_type' => 'Apartment',
-            'location' => 'Verified location',
+            'location' => $location,
             'status' => $status,
             'summary' => 'Verified property summary.',
             'description' => 'Verified property description.',
@@ -172,6 +218,18 @@ class ProjectPagesTest extends TestCase
         ])->save();
 
         return $project;
+    }
+
+    private function addProjectTerm(Project $project, string $unitPrice, int $version = 1): void
+    {
+        DB::table('project_terms')->insert([
+            'project_id' => $project->id,
+            'version' => $version,
+            'unit_price_bdt' => $unitPrice,
+            'effective_from' => now()->toDateString(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     public function test_wallet_can_store_usdt_currency_code(): void

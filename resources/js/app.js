@@ -18,6 +18,37 @@ if (menuToggle instanceof HTMLButtonElement && mobileMenu instanceof HTMLElement
     });
 }
 
+document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) {
+        return;
+    }
+
+    const toggle = event.target.closest('[data-password-toggle]');
+    if (!(toggle instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    const passwordField = toggle.closest('.password-field');
+    const passwordInput = passwordField?.querySelector('input');
+    const eyeIcon = toggle.querySelector('[data-password-eye]');
+    const eyeOffIcon = toggle.querySelector('[data-password-eye-off]');
+
+    if (
+        !(passwordInput instanceof HTMLInputElement)
+        || !(eyeIcon instanceof SVGElement)
+        || !(eyeOffIcon instanceof SVGElement)
+    ) {
+        return;
+    }
+
+    const isVisible = passwordInput.type === 'password';
+    passwordInput.type = isVisible ? 'text' : 'password';
+    toggle.setAttribute('aria-label', isVisible ? toggle.dataset.hideLabel : toggle.dataset.showLabel);
+    toggle.setAttribute('aria-pressed', String(isVisible));
+    eyeIcon.toggleAttribute('hidden', isVisible);
+    eyeOffIcon.toggleAttribute('hidden', !isVisible);
+});
+
 const adminSidebar = document.querySelector('#admin-sidebar');
 const adminSidebarToggle = document.querySelector('.admin-sidebar-toggle');
 const adminSidebarBackdrop = document.querySelector('.admin-sidebar-backdrop');
