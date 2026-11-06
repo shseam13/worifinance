@@ -52,14 +52,14 @@ class Project extends Model
             : $this->name;
     }
 
-    public function displayLocation(): string
+    public function displayLocation(): ?string
     {
         return app()->getLocale() === 'bn' && $this->location_bn
             ? $this->location_bn
             : $this->location;
     }
 
-    public function displayCategory(): string
+    public function displayCategory(): ?string
     {
         $translation = match ($this->category) {
             'Residential' => 'site.categories.residential',

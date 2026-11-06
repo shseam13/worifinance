@@ -12,13 +12,6 @@ class ProjectController extends Controller
 {
     public function index(Request $request): View
     {
-        $categories = [
-            'Residential' => 'site.categories.residential',
-            'Commercial' => 'site.categories.commercial',
-            'Hospitality' => 'site.categories.hospitality',
-            'Land' => 'site.categories.land',
-            'Mixed-use' => 'site.categories.mixed_use',
-        ];
         $budgetOptions = [
             'under_5000' => 'site.projects.budget_under_5000',
             '5000_10000' => 'site.projects.budget_5000_10000',
@@ -27,7 +20,6 @@ class ProjectController extends Controller
         ];
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
-            'category' => ['nullable', Rule::in(array_keys($categories))],
             'budget' => ['nullable', Rule::in(array_keys($budgetOptions))],
         ]);
         $search = trim($filters['q'] ?? '');
@@ -40,16 +32,8 @@ class ProjectController extends Controller
             $like = '%'.$search.'%';
             $query->where(function (Builder $query) use ($like): void {
                 $query->where('name', 'like', $like)
-                    ->orWhere('name_bn', 'like', $like)
-                    ->orWhere('location', 'like', $like)
-                    ->orWhere('location_bn', 'like', $like)
-                    ->orWhere('developer', 'like', $like)
-                    ->orWhere('developer_bn', 'like', $like);
+                    ->orWhere('name_bn', 'like', $like);
             });
-        }
-
-        if (! empty($filters['category'])) {
-            $query->where('category', $filters['category']);
         }
 
         if (! empty($filters['budget'])) {
@@ -76,7 +60,6 @@ class ProjectController extends Controller
         return view('projects.index', [
             'projects' => $query->orderByDesc('published_at')->paginate(9)->withQueryString(),
             'filters' => $filters,
-            'categories' => $categories,
             'budgetOptions' => $budgetOptions,
             'heroImageUrl' => $heroProject?->primaryImage?->url(),
         ]);

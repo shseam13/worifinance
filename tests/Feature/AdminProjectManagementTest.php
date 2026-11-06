@@ -59,6 +59,57 @@ class AdminProjectManagementTest extends TestCase
             ->assertSee('data-gallery-thumbnail');
     }
 
+    public function test_admin_can_publish_a_project_without_category_location_or_developer(): void
+    {
+        Storage::fake('public');
+        $projectData = $this->projectData();
+        unset($projectData['category'], $projectData['location'], $projectData['developer']);
+
+        $this->actingAs($this->admin())
+            ->post(route('admin.projects.store'), [
+                ...$projectData,
+                'status' => 'published',
+                'cover_image' => $this->image('cover.png'),
+            ])
+            ->assertRedirect();
+
+        $project = Project::query()->where('slug', 'verified-dhaka-property')->firstOrFail();
+        $this->assertDatabaseHas('projects', [
+            'id' => $project->id,
+            'category' => null,
+            'location' => null,
+            'developer' => null,
+        ]);
+
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('Verified Dhaka Property')
+            ->assertDontSee('<dt>Location</dt>', false);
+    }
+
+    public function test_admin_project_search_matches_names_but_not_location_or_developer(): void
+    {
+        $project = $this->createDraftProject();
+        $project->forceFill([
+            'location' => 'Searchable Location',
+            'developer' => 'Searchable Developer',
+        ])->save();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->get(route('admin.projects.index', ['search' => 'Verified Dhaka']))
+            ->assertOk()
+            ->assertSee($project->name);
+
+        $this->get(route('admin.projects.index', ['search' => 'Searchable Location']))
+            ->assertOk()
+            ->assertDontSee($project->name);
+
+        $this->get(route('admin.projects.index', ['search' => 'Searchable Developer']))
+            ->assertOk()
+            ->assertDontSee($project->name);
+    }
+
     public function test_admin_can_upload_project_images_over_five_megabytes(): void
     {
         Storage::fake('public');

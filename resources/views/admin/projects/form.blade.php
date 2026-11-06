@@ -41,8 +41,9 @@
                             @error('name_bn') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
-                            <span>{{ __('site.admin_projects.category') }} <b>*</b></span>
-                            <select name="category" required>
+                            <span>{{ __('site.admin_projects.category') }}</span>
+                            <select name="category">
+                                <option value="">{{ __('site.admin_projects.optional_field') }}</option>
                                 @foreach ([
                                     'Residential' => __('site.categories.residential'),
                                     'Commercial' => __('site.categories.commercial'),
@@ -61,8 +62,8 @@
                             @error('project_type') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
-                            <span>{{ __('site.admin_projects.location') }} <b>*</b></span>
-                            <input name="location" value="{{ old('location', $project->location) }}" maxlength="255" required>
+                            <span>{{ __('site.admin_projects.location') }}</span>
+                            <input name="location" value="{{ old('location', $project->location) }}" maxlength="255">
                             @error('location') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">

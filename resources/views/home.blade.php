@@ -102,10 +102,14 @@
                     <div class="landing-spotlight-copy">
                         <div class="landing-spotlight-tags">
                             <span>{{ __('site.projects.profile') }}</span>
-                            <span>{{ $spotlightProject->displayCategory() }}</span>
+                            @if ($spotlightProject->displayCategory())
+                                <span>{{ $spotlightProject->displayCategory() }}</span>
+                            @endif
                         </div>
                         <h3>{{ $spotlightProject->displayName() }}</h3>
-                        <p class="landing-spotlight-location">{{ $spotlightProject->displayLocation() }}</p>
+                        @if ($spotlightProject->displayLocation())
+                            <p class="landing-spotlight-location">{{ $spotlightProject->displayLocation() }}</p>
+                        @endif
                         <p class="landing-spotlight-summary">{{ $spotlightProject->displaySummary() ?: __('site.landing.spotlight_description') }}</p>
                         <div class="landing-spotlight-metrics">
                             <div>

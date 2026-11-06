@@ -127,30 +127,37 @@ class ProjectPagesTest extends TestCase
             ->assertDontSee('not-a-published-project');
     }
 
-    public function test_project_directory_filters_by_search_category_and_budget(): void
+    public function test_project_directory_searches_by_name_and_filters_by_unit_price(): void
     {
-        $matchingProject = $this->createProject('Dhaka Lakeside', 'published', 'Commercial', 'Dhaka');
-        $otherCategory = $this->createProject('Dhaka Garden Homes', 'published', 'Residential', 'Dhaka');
-        $otherBudget = $this->createProject('Dhaka Business Tower', 'published', 'Commercial', 'Dhaka');
-        $this->createProject('Hidden Dhaka Commercial', 'draft', 'Commercial', 'Dhaka');
+        $matchingProject = $this->createProject('Lakeside Residences', 'published', 'Commercial', 'Dhaka');
+        $locationMatch = $this->createProject('Garden Homes', 'published', 'Residential', 'Lakeside');
+        $developerMatch = $this->createProject('Harbor Tower', 'published', 'Commercial', 'Dhaka');
+        $developerMatch->forceFill(['developer' => 'Lakeside Developments'])->save();
+        $otherBudget = $this->createProject('Lakeside Business Tower', 'published', 'Commercial', 'Dhaka');
+        $this->createProject('Hidden Lakeside Project', 'draft', 'Commercial', 'Dhaka');
         $this->addProjectTerm($matchingProject, '15000.00');
         $this->addProjectTerm($matchingProject, '7500.00', 2);
-        $this->addProjectTerm($otherCategory, '7500.00');
+        $this->addProjectTerm($locationMatch, '7500.00');
+        $this->addProjectTerm($developerMatch, '7500.00');
         $this->addProjectTerm($otherBudget, '15000.00');
 
         $this->get(route('projects.index', [
-            'q' => 'Dhaka',
-            'category' => 'Commercial',
+            'q' => 'Lakeside',
             'budget' => '5000_10000',
         ]))
             ->assertOk()
-            ->assertSee('Dhaka Lakeside')
-            ->assertDontSee('Dhaka Garden Homes')
-            ->assertDontSee('Dhaka Business Tower')
-            ->assertDontSee('Hidden Dhaka Commercial')
+            ->assertSee('Lakeside Residences')
+            ->assertDontSee('Garden Homes')
+            ->assertDontSee('Harbor Tower')
+            ->assertDontSee('Lakeside Business Tower')
+            ->assertDontSee('Hidden Lakeside Project')
             ->assertSee('name="q"', false)
-            ->assertSee('value="Commercial" selected', false)
-            ->assertSee('value="5000_10000" selected', false);
+            ->assertSee('value="5000_10000" selected', false)
+            ->assertDontSee('name="category"', false);
+
+        $this->get(route('projects.index', ['q' => 'Dhaka']))
+            ->assertOk()
+            ->assertDontSee('Lakeside Residences');
     }
 
     public function test_project_directory_uses_a_published_cover_image_for_its_hero(): void

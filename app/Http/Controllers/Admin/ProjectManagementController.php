@@ -33,8 +33,7 @@ class ProjectManagementController extends Controller
             $search = '%'.$request->string('search')->trim().'%';
             $query->where(function (Builder $query) use ($search): void {
                 $query->where('name', 'like', $search)
-                    ->orWhere('location', 'like', $search)
-                    ->orWhere('developer', 'like', $search);
+                    ->orWhere('name_bn', 'like', $search);
             });
         }
 
@@ -304,9 +303,9 @@ class ProjectManagementController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'name_bn' => ['nullable', 'string', 'max:255'],
-            'category' => ['required', Rule::in(['Residential', 'Commercial', 'Hospitality', 'Land', 'Mixed-use'])],
+            'category' => ['nullable', Rule::in(['Residential', 'Commercial', 'Hospitality', 'Land', 'Mixed-use'])],
             'project_type' => ['required', 'string', 'max:80'],
-            'location' => ['required', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:255'],
             'location_bn' => ['nullable', 'string', 'max:255'],
             'developer' => ['nullable', 'string', 'max:255'],
             'developer_bn' => ['nullable', 'string', 'max:255'],
@@ -370,9 +369,9 @@ class ProjectManagementController extends Controller
         return [
             'name' => $validated['name'],
             'name_bn' => $validated['name_bn'] ?? null,
-            'category' => $validated['category'],
+            'category' => $validated['category'] ?? null,
             'project_type' => $validated['project_type'],
-            'location' => $validated['location'],
+            'location' => $validated['location'] ?? null,
             'location_bn' => $validated['location_bn'] ?? null,
             'developer' => $validated['developer'] ?? null,
             'developer_bn' => $validated['developer_bn'] ?? null,

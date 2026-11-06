@@ -85,7 +85,9 @@
                             </a>
                             <div class="admin-project-card-content">
                                 <div>
-                                    <span class="admin-project-category">{{ $project->displayCategory() }} · {{ $project->displayLocation() }}</span>
+                                    @if ($project->displayCategory() || $project->displayLocation())
+                                        <span class="admin-project-category">{{ collect([$project->displayCategory(), $project->displayLocation()])->filter()->implode(' · ') }}</span>
+                                    @endif
                                     <h2>{{ $project->displayName() }}</h2>
                                     <p>{{ $project->displaySummary() }}</p>
                                 </div>

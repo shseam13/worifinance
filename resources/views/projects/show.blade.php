@@ -10,10 +10,12 @@
             <div>
                 <span class="eyebrow"><span class="eyebrow-dot"></span>{{ __('site.projects.profile') }}</span>
                 <h1>{{ $project->displayName() }}</h1>
-                <p class="detail-location">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                    {{ $project->displayLocation() }}
-                </p>
+                @if ($project->displayLocation())
+                    <p class="detail-location">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        {{ $project->displayLocation() }}
+                    </p>
+                @endif
             </div>
             @if ($project->is_sample)
                 <span class="project-tag project-tag-static">{{ __('site.projects.sample') }}</span>
@@ -78,7 +80,9 @@
                 <span class="eyebrow eyebrow-muted">{{ __('site.projects.investment_terms') }}</span>
                 <h2>{{ $project->displayType() }}</h2>
                 <dl class="terms-list">
-                    <div><dt>{{ __('site.projects.location') }}</dt><dd>{{ $project->displayLocation() }}</dd></div>
+                    @if ($project->displayLocation())
+                        <div><dt>{{ __('site.projects.location') }}</dt><dd>{{ $project->displayLocation() }}</dd></div>
+                    @endif
                     <div><dt>{{ __('site.projects.project_type') }}</dt><dd>{{ $project->displayType() }}</dd></div>
                     <div><dt>{{ __('site.projects.developer') }}</dt><dd>{{ $project->displayDeveloper() ?? '—' }}</dd></div>
                     @if ($project->expected_handover_at)
