@@ -44,14 +44,8 @@
                             <span>{{ __('site.admin_projects.category') }}</span>
                             <select name="category">
                                 <option value="">{{ __('site.admin_projects.optional_field') }}</option>
-                                @foreach ([
-                                    'Residential' => __('site.categories.residential'),
-                                    'Commercial' => __('site.categories.commercial'),
-                                    'Hospitality' => __('site.categories.hospitality'),
-                                    'Land' => __('site.categories.land'),
-                                    'Mixed-use' => __('site.categories.mixed_use'),
-                                ] as $category => $label)
-                                    <option value="{{ $category }}" @selected(old('category', $project->category) === $category)>{{ $label }}</option>
+                                @foreach ($categories as $category)
+                                    <option value="{{ $category->name }}" @selected(old('category', $project->category) === $category->name)>{{ $category->displayName() }}</option>
                                 @endforeach
                             </select>
                             @error('category') <small class="auth-error">{{ $message }}</small> @enderror
@@ -141,17 +135,17 @@
                         </label>
                         <label class="admin-form-field">
                             <span>{{ __('site.admin_projects.annual_rate_percent') }}</span>
-                            <input type="number" name="annual_rate_percent" min="0" max="100" step="0.0001" value="{{ old('annual_rate_percent', $term->annual_rate_percent) }}">
+                            <input type="number" name="annual_rate_percent" min="0" max="100" step="0.01" value="{{ old('annual_rate_percent', $term->annual_rate_percent !== null ? number_format((float) $term->annual_rate_percent, 2, '.', '') : '') }}">
                             @error('annual_rate_percent') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
                             <span>{{ __('site.admin_projects.return_min') }}</span>
-                            <input type="number" name="estimated_return_min_percent" min="0" max="100" step="0.0001" value="{{ old('estimated_return_min_percent', $term->estimated_return_min_percent) }}">
+                            <input type="number" name="estimated_return_min_percent" min="0" max="100" step="0.01" value="{{ old('estimated_return_min_percent', $term->estimated_return_min_percent !== null ? number_format((float) $term->estimated_return_min_percent, 2, '.', '') : '') }}">
                             @error('estimated_return_min_percent') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
                             <span>{{ __('site.admin_projects.return_max') }}</span>
-                            <input type="number" name="estimated_return_max_percent" min="0" max="100" step="0.0001" value="{{ old('estimated_return_max_percent', $term->estimated_return_max_percent) }}">
+                            <input type="number" name="estimated_return_max_percent" min="0" max="100" step="0.01" value="{{ old('estimated_return_max_percent', $term->estimated_return_max_percent !== null ? number_format((float) $term->estimated_return_max_percent, 2, '.', '') : '') }}">
                             @error('estimated_return_max_percent') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">

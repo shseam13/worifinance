@@ -26,7 +26,7 @@ class ProjectController extends Controller
 
         $query = Project::query()
             ->published()
-            ->with(['currentTerms', 'primaryImage']);
+            ->with(['currentTerms', 'primaryImage', 'categoryRecord']);
 
         if ($search !== '') {
             $like = '%'.$search.'%';
@@ -74,7 +74,7 @@ class ProjectController extends Controller
             404,
         );
 
-        $project->load(['currentTerms', 'images']);
+        $project->load(['currentTerms', 'images', 'categoryRecord']);
 
         return view('projects.show', compact('project'));
     }

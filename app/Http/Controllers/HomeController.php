@@ -12,7 +12,7 @@ class HomeController extends Controller
     {
         $projects = Project::query()
             ->published()
-            ->with(['currentTerms', 'primaryImage'])
+            ->with(['currentTerms', 'primaryImage', 'categoryRecord'])
             ->orderByDesc('published_at')
             ->limit(3)
             ->get();

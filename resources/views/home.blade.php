@@ -143,7 +143,7 @@
                             <p class="landing-spotlight-return">
                                 {{ __('site.landing.published_return') }}:
                                 <strong>
-                                    {{ $spotlightProject->currentTerms->estimated_return_min_percent ?? '—' }}%–{{ $spotlightProject->currentTerms->estimated_return_max_percent ?? '—' }}%
+                                    {{ $spotlightProject->currentTerms->estimated_return_min_percent !== null ? number_format((float) $spotlightProject->currentTerms->estimated_return_min_percent, 2) : '—' }}%–{{ $spotlightProject->currentTerms->estimated_return_max_percent !== null ? number_format((float) $spotlightProject->currentTerms->estimated_return_max_percent, 2) : '—' }}%
                                 </strong>
                             </p>
                         @endif

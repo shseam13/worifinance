@@ -17,6 +17,9 @@
         @if (session('status'))
             <div class="admin-flash" role="status">{{ session('status') }}</div>
         @endif
+        @error('project')
+            <div class="portal-notice portal-notice-warning" role="alert"><div><p>{{ $message }}</p></div></div>
+        @enderror
 
         <div class="portal-notice portal-notice-warning">
             <div>
@@ -39,6 +42,43 @@
                     {{ $demoProjectsEnabled ? __('site.admin_projects.hide_demos') : __('site.admin_projects.enable_demos') }}
                 </button>
             </form>
+        </section>
+
+        <section class="portal-panel">
+            <div class="portal-panel-heading">
+                <div>
+                    <span class="section-eyebrow">{{ __('site.admin_projects.categories_eyebrow') }}</span>
+                    <h2>{{ __('site.admin_projects.categories_title') }}</h2>
+                    <p>{{ __('site.admin_projects.categories_help') }}</p>
+                </div>
+            </div>
+            @error('category')<div class="portal-notice portal-notice-warning" role="alert"><div><p>{{ $message }}</p></div></div>@enderror
+            @error('name')<div class="portal-notice portal-notice-warning" role="alert"><div><p>{{ $message }}</p></div></div>@enderror
+            @error('name_bn')<div class="portal-notice portal-notice-warning" role="alert"><div><p>{{ $message }}</p></div></div>@enderror
+            <form class="admin-filter-form" action="{{ route('admin.projects.categories.store') }}" method="post">
+                @csrf
+                <label class="admin-search-field">
+                    <span>{{ __('site.admin_projects.category_name') }}</span>
+                    <input name="name" maxlength="80" value="{{ old('name') }}" required>
+                </label>
+                <label class="admin-search-field">
+                    <span>{{ __('site.admin_projects.category_name_bn') }}</span>
+                    <input name="name_bn" maxlength="80" value="{{ old('name_bn') }}" lang="bn">
+                </label>
+                <button class="button button-dark button-small" type="submit">{{ __('site.admin_projects.add_category') }}</button>
+            </form>
+            <div class="admin-category-list">
+                @foreach ($categories as $category)
+                    <div class="admin-category-item">
+                        <span>{{ $category->displayName() }}@if ($category->name_bn)<small>{{ app()->getLocale() === 'bn' ? $category->name : $category->name_bn }}</small>@endif</span>
+                        <form action="{{ route('admin.projects.categories.destroy', $category) }}" method="post">
+                            @csrf
+                            @method('delete')
+                            <button class="button button-outline button-small" type="submit">{{ __('site.admin_projects.delete_category') }}</button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
         </section>
 
         <section class="portal-panel">
@@ -93,7 +133,16 @@
                                 </div>
                                 <div class="admin-project-card-footer">
                                     <small>{{ trans_choice('site.admin_projects.terms_count', $project->terms_count, ['count' => $project->terms_count]) }}</small>
-                                    <a class="text-link" href="{{ route('admin.projects.edit', $project) }}">{{ $project->is_sample ? __('site.admin_projects.read_only') : __('site.admin_projects.edit') }} <span aria-hidden="true">→</span></a>
+                                    <div class="admin-project-actions">
+                                        <a class="text-link" href="{{ route('admin.projects.edit', $project) }}">{{ $project->is_sample ? __('site.admin_projects.read_only') : __('site.admin_projects.edit') }} <span aria-hidden="true">→</span></a>
+                                        @unless ($project->is_sample)
+                                            <form action="{{ route('admin.projects.destroy', $project) }}" method="post" onsubmit="return confirm(@js(__('site.admin_projects.confirm_delete')))">
+                                                @csrf
+                                                @method('delete')
+                                                <button class="button button-outline button-small admin-delete-button" type="submit">{{ __('site.admin_projects.delete_project') }}</button>
+                                            </form>
+                                        @endunless
+                                    </div>
                                 </div>
                             </div>
                         </article>

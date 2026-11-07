@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Project;
+use App\Models\ProjectCategory;
 use App\Models\ProjectTerm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,7 +23,179 @@ class AdminProjectManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Property information')
             ->assertSee('Project photos')
+            ->assertSee('Residential')
             ->assertSee('Create project');
+    }
+
+    public function test_admin_can_create_and_delete_an_unused_project_category(): void
+    {
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->post(route('admin.projects.categories.store'), [
+                'name' => ' Waterfront ',
+                'name_bn' => 'নদীতীর',
+            ])
+            ->assertRedirect(route('admin.projects.index'));
+
+        $category = ProjectCategory::query()->where('name', 'Waterfront')->firstOrFail();
+        $this->assertSame('নদীতীর', $category->name_bn);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'admin_user_id' => $admin->id,
+            'action' => 'project_category.created',
+            'subject_id' => $category->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.projects.categories.destroy', $category))
+            ->assertRedirect(route('admin.projects.index'));
+
+        $this->assertDatabaseMissing('project_categories', ['id' => $category->id]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'admin_user_id' => $admin->id,
+            'action' => 'project_category.deleted',
+            'subject_id' => $category->id,
+        ]);
+    }
+
+    public function test_admin_cannot_delete_a_project_category_that_is_in_use(): void
+    {
+        $project = $this->createDraftProject();
+        $category = ProjectCategory::query()->where('name', 'Residential')->firstOrFail();
+
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.index'))
+            ->delete(route('admin.projects.categories.destroy', $category))
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHasErrors([
+                'category' => __('site.admin_projects.category_in_use'),
+            ]);
+
+        $this->assertDatabaseHas('project_categories', ['id' => $category->id]);
+        $this->assertDatabaseHas('projects', ['id' => $project->id, 'category' => 'Residential']);
+    }
+
+    public function test_admin_can_delete_a_project_without_financial_history_and_its_uploaded_images(): void
+    {
+        Storage::fake('public');
+        $admin = $this->admin();
+        $project = $this->createDraftProject();
+        $image = $project->images()->make();
+        $image->forceFill([
+            'path' => 'projects/delete-cover.png',
+            'alt_text' => $project->name,
+            'sort_order' => 0,
+            'is_primary' => true,
+        ])->save();
+        Storage::disk('public')->put($image->path, 'cover');
+
+        $this->actingAs($admin)
+            ->delete(route('admin.projects.destroy', $project))
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHas('status', __('site.admin_projects.deleted'));
+
+        $this->assertDatabaseMissing('projects', ['id' => $project->id]);
+        $this->assertDatabaseMissing('project_terms', ['project_id' => $project->id]);
+        $this->assertDatabaseMissing('project_images', ['id' => $image->id]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'admin_user_id' => $admin->id,
+            'action' => 'project.deleted',
+            'subject_id' => $project->id,
+        ]);
+        Storage::disk('public')->assertMissing($image->path);
+    }
+
+    public function test_admin_cannot_delete_a_project_with_investment_history(): void
+    {
+        $project = $this->createDraftProject();
+        $investor = User::factory()->create();
+        DB::table('investments')->insert([
+            'user_id' => $investor->id,
+            'project_id' => $project->id,
+            'project_term_id' => $project->terms()->value('id'),
+            'unit_count' => 1,
+            'unit_price_bdt' => '1200.00',
+            'amount_bdt' => '1200.00',
+            'payment_currency' => 'BDT',
+            'paid_amount' => '1200.00000000',
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.index'))
+            ->delete(route('admin.projects.destroy', $project))
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHasErrors([
+                'project' => __('site.admin_projects.delete_financial_history'),
+            ]);
+
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+        $this->assertDatabaseMissing('admin_audit_logs', ['action' => 'project.deleted']);
+    }
+
+    public function test_admin_cannot_delete_a_project_with_profit_distribution_history(): void
+    {
+        $project = $this->createDraftProject();
+        DB::table('profit_distributions')->insert([
+            'project_id' => $project->id,
+            'project_term_id' => $project->terms()->value('id'),
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-31',
+            'annual_rate_snapshot' => 5,
+            'payout_currency' => 'BDT',
+            'status' => 'draft',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.index'))
+            ->delete(route('admin.projects.destroy', $project))
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHasErrors([
+                'project' => __('site.admin_projects.delete_financial_history'),
+            ]);
+
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+        $this->assertDatabaseMissing('admin_audit_logs', ['action' => 'project.deleted']);
+    }
+
+    public function test_non_admin_cannot_delete_a_project(): void
+    {
+        $project = $this->createDraftProject();
+
+        $this->actingAs(User::factory()->create())
+            ->delete(route('admin.projects.destroy', $project))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+    }
+
+    public function test_admin_cannot_delete_a_sample_project(): void
+    {
+        $project = $this->createDraftProject();
+        $project->forceFill(['is_sample' => true])->save();
+
+        $this->actingAs($this->admin())
+            ->delete(route('admin.projects.destroy', $project))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('projects', ['id' => $project->id, 'is_sample' => true]);
+    }
+
+    public function test_admin_cannot_create_a_duplicate_project_category(): void
+    {
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.index'))
+            ->post(route('admin.projects.categories.store'), [
+                'name' => 'Residential',
+            ])
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHasErrors('name');
+
+        $this->assertDatabaseCount('project_categories', 5);
     }
 
     public function test_admin_can_create_and_publish_a_project_with_public_images(): void
@@ -85,6 +258,29 @@ class AdminProjectManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Verified Dhaka Property')
             ->assertDontSee('<dt>Location</dt>', false);
+    }
+
+    public function test_project_term_percentages_reject_more_than_two_decimal_places(): void
+    {
+        $projectData = $this->projectData();
+        $projectData['annual_rate_percent'] = '8.555';
+        $projectData['estimated_return_min_percent'] = '5.555';
+        $projectData['estimated_return_max_percent'] = '12.555';
+
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.create'))
+            ->post(route('admin.projects.store'), [
+                ...$projectData,
+                'status' => 'draft',
+            ])
+            ->assertRedirect(route('admin.projects.create'))
+            ->assertSessionHasErrors([
+                'annual_rate_percent',
+                'estimated_return_min_percent',
+                'estimated_return_max_percent',
+            ]);
+
+        $this->assertDatabaseCount('projects', 0);
     }
 
     public function test_admin_project_search_matches_names_but_not_location_or_developer(): void

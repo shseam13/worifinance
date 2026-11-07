@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -45,6 +46,11 @@ class Project extends Model
         return $this->hasOne(ProjectImage::class)->where('is_primary', true);
     }
 
+    public function categoryRecord(): BelongsTo
+    {
+        return $this->belongsTo(ProjectCategory::class, 'category', 'name');
+    }
+
     public function displayName(): string
     {
         return app()->getLocale() === 'bn' && $this->name_bn
@@ -61,6 +67,10 @@ class Project extends Model
 
     public function displayCategory(): ?string
     {
+        if ($this->categoryRecord !== null) {
+            return $this->categoryRecord->displayName();
+        }
+
         $translation = match ($this->category) {
             'Residential' => 'site.categories.residential',
             'Hospitality' => 'site.categories.hospitality',
@@ -75,7 +85,7 @@ class Project extends Model
 
     public function displayType(): string
     {
-        $type = $this->project_type ?? $this->category;
+        $type = $this->project_type ?? $this->displayCategory() ?? __('site.projects.profile');
 
         $translation = match ($type) {
             'Hotel' => 'site.categories.hotel',

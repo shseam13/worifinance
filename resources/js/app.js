@@ -49,6 +49,24 @@ document.addEventListener('click', (event) => {
     eyeOffIcon.toggleAttribute('hidden', !isVisible);
 });
 
+const termsDialog = document.querySelector('[data-terms-dialog]');
+const termsOpenButton = document.querySelector('[data-terms-open]');
+const termsCloseButton = document.querySelector('[data-terms-close]');
+
+if (
+    termsDialog instanceof HTMLDialogElement
+    && termsOpenButton instanceof HTMLButtonElement
+    && termsCloseButton instanceof HTMLButtonElement
+) {
+    termsOpenButton.addEventListener('click', () => termsDialog.showModal());
+    termsCloseButton.addEventListener('click', () => termsDialog.close());
+    termsDialog.addEventListener('click', (event) => {
+        if (event.target === termsDialog) {
+            termsDialog.close();
+        }
+    });
+}
+
 const adminSidebar = document.querySelector('#admin-sidebar');
 const adminSidebarToggle = document.querySelector('.admin-sidebar-toggle');
 const adminSidebarBackdrop = document.querySelector('.admin-sidebar-backdrop');

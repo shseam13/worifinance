@@ -34,18 +34,27 @@
                 <label for="password_confirmation">{{ __('site.auth.confirm_password') }}</label>
                 <x-password-input id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
                 <input type="hidden" name="terms_version" value="{{ $terms['version'] }}">
-                <section class="auth-terms" id="terms-and-conditions" aria-labelledby="terms-title">
-                    <h2 id="terms-title">{{ __('site.auth.terms_title') }}</h2>
-                    <p class="auth-terms-content">{{ $terms['content'] }}</p>
+                <section class="auth-terms" aria-label="{{ __('site.auth.terms_title') }}">
                     <label class="auth-terms-agreement" for="terms_accepted">
                         <input id="terms_accepted" name="terms_accepted" type="checkbox" value="1" required @checked(old('terms_accepted') && (string) old('terms_version') === (string) $terms['version'])>
                         <span>{{ __('site.auth.terms_agreement') }}</span>
                     </label>
+                    <button class="auth-terms-link" type="button" data-terms-open aria-haspopup="dialog">
+                        {{ __('site.auth.terms_open') }}
+                    </button>
                     @error('terms_accepted') <span class="auth-error">{{ $message }}</span> @enderror
                     @error('terms_version') <span class="auth-error">{{ $message }}</span> @enderror
                 </section>
                 <button class="button button-dark auth-submit" type="submit">{{ __('site.auth.create_account') }} <span aria-hidden="true">→</span></button>
             </form>
+
+            <dialog class="auth-terms-dialog" data-terms-dialog aria-labelledby="terms-title">
+                <div class="auth-terms-dialog-heading">
+                    <h2 id="terms-title">{{ __('site.auth.terms_title') }}</h2>
+                    <button class="auth-terms-dialog-close" type="button" data-terms-close aria-label="{{ __('site.auth.terms_close') }}">×</button>
+                </div>
+                <div class="auth-terms-content">{{ $terms['content'] }}</div>
+            </dialog>
 
             <p class="auth-switch">{{ __('site.auth.login_prompt') }} <a href="{{ route('login') }}">{{ __('site.auth.login') }}</a></p>
         </div>

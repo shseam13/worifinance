@@ -2597,28 +2597,109 @@ svg {
 
 .auth-terms {
     display: grid;
-    gap: 12px;
+    gap: 8px;
     margin-top: 12px;
-    padding: 16px;
+    padding: 13px 15px;
     border: 1px solid #e1e9e1;
     border-radius: 14px;
     background: #f8fbf8;
 }
 
-.auth-terms h2 {
-    margin: 0;
-    color: #284a37;
-    font-size: 14px;
+.auth-terms-content {
+    flex: 0 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    max-height: calc(78vh - 72px);
+    padding: 18px 20px 20px;
+    color: #5e6f64;
+    font-size: 13px;
+    line-height: 1.75;
+    white-space: pre-wrap;
 }
 
-.auth-terms-content {
-    max-height: 180px;
-    overflow-y: auto;
+.auth-terms-link {
+    justify-self: start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #167447;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.auth-terms-link:hover {
+    color: #105b37;
+}
+
+.auth-terms-dialog:not([open]) {
+    display: none;
+}
+
+.auth-terms-dialog[open] {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    width: min(620px, calc(100% - 32px));
+    max-width: 620px;
+    max-height: min(78vh, 680px);
     margin: 0;
-    color: #5e6f64;
-    font-size: 11px;
-    line-height: 1.8;
-    white-space: pre-wrap;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dfe9df;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 24px 80px rgba(13, 30, 20, .25);
+    transform: translate(-50%, -50%);
+}
+
+.auth-terms-dialog::backdrop {
+    background: rgba(15, 25, 20, .62);
+    backdrop-filter: blur(3px);
+}
+
+.auth-terms-dialog-heading {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 17px 20px;
+    border-bottom: 1px solid #e8eee8;
+}
+
+.auth-terms-dialog-heading h2 {
+    margin: 0;
+    color: #284a37;
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 500;
+}
+
+.auth-terms-dialog-close {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border: 1px solid #e1e9e1;
+    border-radius: 50%;
+    background: #f8fbf8;
+    color: #284a37;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.auth-terms-dialog-close:focus-visible,
+.auth-terms-link:focus-visible {
+    outline: 3px solid rgba(45, 137, 92, .35);
+    outline-offset: 3px;
 }
 
 .auth-terms-agreement {
@@ -3730,6 +3811,39 @@ a.admin-nav-link:hover,
     font-weight: 700;
 }
 
+.admin-category-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+}
+
+.admin-category-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 11px 13px;
+    border: 1px solid #e8eee8;
+    border-radius: 12px;
+    color: var(--green-dark);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.admin-category-item > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-category-item small {
+    display: block;
+    margin-top: 3px;
+    color: #89958c;
+    font-size: 10px;
+    font-weight: 500;
+}
+
 .admin-project-card h2 {
     margin: 7px 0;
     color: var(--green-dark);
@@ -3752,6 +3866,25 @@ a.admin-nav-link:hover,
     gap: 8px;
     border-top: 1px solid #edf1ed;
     padding-top: 12px;
+}
+
+.admin-project-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.admin-delete-button {
+    min-height: 34px;
+    border-color: #efcfca;
+    color: #a4483c;
+}
+
+.admin-delete-button:hover {
+    border-color: #d8a39b;
+    background: #fff6f4;
 }
 
 .admin-project-card-footer small {

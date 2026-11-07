@@ -26,7 +26,12 @@ class AuthPagesTest extends TestCase
             ->assertOk()
             ->assertSee('Create investor account')
             ->assertSee('Terms and conditions')
+            ->assertSee('Read the Terms and Conditions')
+            ->assertSee('data-terms-dialog', false)
+            ->assertSee('data-terms-open', false)
+            ->assertSee('data-terms-close', false)
             ->assertSee('name="terms_accepted"', false)
+            ->assertSee('required', false)
             ->assertSee('data-password-toggle', false);
     }
 

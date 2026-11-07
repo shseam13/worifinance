@@ -27,7 +27,7 @@
             </div>
             <div class="project-summary-list">
                 <div class="project-summary-row"><span>{{ __('site.projects.unit_price') }}</span><strong>@money($project->currentTerms->unit_price_bdt, 'BDT')</strong></div>
-                <div class="project-summary-row"><span>{{ __('site.investments.annual_rate') }}</span><strong>{{ number_format((float) $project->currentTerms->annual_rate_percent, 4) }}%</strong></div>
+                <div class="project-summary-row"><span>{{ __('site.investments.annual_rate') }}</span><strong>{{ number_format((float) $project->currentTerms->annual_rate_percent, 2) }}%</strong></div>
                 <div class="project-summary-row"><span>{{ __('site.projects.units') }}</span><strong>{{ number_format($project->available_units) }}</strong></div>
             </div>
         </section>

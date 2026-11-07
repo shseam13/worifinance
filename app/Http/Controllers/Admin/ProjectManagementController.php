@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Models\ProjectCategory;
 use App\Models\ProjectImage;
 use App\Models\ProjectTerm;
 use Illuminate\Contracts\View\View;
@@ -23,7 +24,7 @@ class ProjectManagementController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Project::query()->with('primaryImage')->withCount('terms');
+        $query = Project::query()->with(['primaryImage', 'categoryRecord'])->withCount('terms');
 
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['draft', 'published', 'archived'], true)) {
             $query->where('status', $request->string('status')->toString());
@@ -40,6 +41,7 @@ class ProjectManagementController extends Controller
         return view('admin.projects.index', [
             ...$this->adminLayoutCounts(),
             'projects' => $query->latest('updated_at')->paginate(12)->withQueryString(),
+            'categories' => ProjectCategory::query()->orderBy('name')->get(),
             'demoProjectsEnabled' => Project::query()->where('is_sample', true)->where('status', 'published')->exists(),
             'status' => $request->string('status')->toString(),
             'search' => $request->string('search')->toString(),
@@ -65,6 +67,7 @@ class ProjectManagementController extends Controller
             'project' => $project,
             'term' => $term,
             'editing' => false,
+            'categories' => ProjectCategory::query()->orderBy('name')->get(),
         ]);
     }
 
@@ -216,7 +219,71 @@ class ProjectManagementController extends Controller
             'project' => $project,
             'term' => $term,
             'editing' => true,
+            'categories' => ProjectCategory::query()->orderBy('name')->get(),
         ]);
+    }
+
+    public function storeCategory(Request $request): RedirectResponse
+    {
+        $request->merge([
+            'name' => is_string($request->input('name')) ? trim($request->input('name')) : $request->input('name'),
+            'name_bn' => is_string($request->input('name_bn')) ? trim($request->input('name_bn')) : $request->input('name_bn'),
+        ]);
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80', Rule::unique('project_categories', 'name')],
+            'name_bn' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        DB::transaction(function () use ($request, $validated): void {
+            $category = new ProjectCategory;
+            $category->forceFill($validated)->save();
+
+            DB::table('admin_audit_logs')->insert([
+                'admin_user_id' => $request->user()->id,
+                'action' => 'project_category.created',
+                'subject_type' => ProjectCategory::class,
+                'subject_id' => $category->id,
+                'before_values' => null,
+                'after_values' => json_encode([
+                    'name' => $category->name,
+                    'name_bn' => $category->name_bn,
+                ], JSON_THROW_ON_ERROR),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        return redirect()->route('admin.projects.index')->with('status', __('site.admin_projects.category_created'));
+    }
+
+    public function destroyCategory(Request $request, ProjectCategory $category): RedirectResponse
+    {
+        DB::transaction(function () use ($request, $category): void {
+            if ($category->projects()->exists()) {
+                throw ValidationException::withMessages([
+                    'category' => __('site.admin_projects.category_in_use'),
+                ]);
+            }
+
+            $category->delete();
+            DB::table('admin_audit_logs')->insert([
+                'admin_user_id' => $request->user()->id,
+                'action' => 'project_category.deleted',
+                'subject_type' => ProjectCategory::class,
+                'subject_id' => $category->id,
+                'before_values' => json_encode([
+                    'name' => $category->name,
+                    'name_bn' => $category->name_bn,
+                ], JSON_THROW_ON_ERROR),
+                'after_values' => null,
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        return redirect()->route('admin.projects.index')->with('status', __('site.admin_projects.category_deleted'));
     }
 
     public function update(Request $request, Project $project): RedirectResponse
@@ -295,6 +362,54 @@ class ProjectManagementController extends Controller
         return redirect()->route('admin.projects.edit', $project)->with('status', __('site.admin_projects.updated'));
     }
 
+    public function destroy(Request $request, Project $project): RedirectResponse
+    {
+        abort_if($project->is_sample, 403, __('site.admin_projects.sample_read_only'));
+
+        $imagePaths = [];
+
+        DB::transaction(function () use ($request, $project, &$imagePaths): void {
+            $project = Project::query()->lockForUpdate()->findOrFail($project->id);
+            $hasInvestments = DB::table('investments')->where('project_id', $project->id)->exists();
+            $hasDistributions = DB::table('profit_distributions')->where('project_id', $project->id)->exists();
+
+            if ($hasInvestments || $hasDistributions) {
+                throw ValidationException::withMessages([
+                    'project' => __('site.admin_projects.delete_financial_history'),
+                ]);
+            }
+
+            $imagePaths = $project->images()
+                ->where('path', 'not like', 'images/%')
+                ->pluck('path')
+                ->all();
+
+            $before = [
+                'name' => $project->name,
+                'slug' => $project->slug,
+                'status' => $project->status,
+            ];
+            $projectId = $project->id;
+            $project->delete();
+
+            DB::table('admin_audit_logs')->insert([
+                'admin_user_id' => $request->user()->id,
+                'action' => 'project.deleted',
+                'subject_type' => Project::class,
+                'subject_id' => $projectId,
+                'before_values' => json_encode($before, JSON_THROW_ON_ERROR),
+                'after_values' => null,
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $this->deleteStoredPaths($imagePaths);
+
+        return redirect()->route('admin.projects.index')->with('status', __('site.admin_projects.deleted'));
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -303,7 +418,7 @@ class ProjectManagementController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'name_bn' => ['nullable', 'string', 'max:255'],
-            'category' => ['nullable', Rule::in(['Residential', 'Commercial', 'Hospitality', 'Land', 'Mixed-use'])],
+            'category' => ['nullable', 'string', 'max:80', Rule::exists('project_categories', 'name')],
             'project_type' => ['required', 'string', 'max:80'],
             'location' => ['nullable', 'string', 'max:255'],
             'location_bn' => ['nullable', 'string', 'max:255'],
@@ -317,9 +432,9 @@ class ProjectManagementController extends Controller
             'available_units' => ['required', 'integer', 'min:0', 'lte:target_units'],
             'expected_handover_at' => ['nullable', 'date'],
             'unit_price_bdt' => ['required', 'numeric', 'gt:0', 'max:999999999999999999', 'regex:/^\d{1,18}(?:\.\d{1,2})?$/'],
-            'annual_rate_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,4})?$/'],
-            'estimated_return_min_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,4})?$/'],
-            'estimated_return_max_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,4})?$/'],
+            'annual_rate_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
+            'estimated_return_min_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
+            'estimated_return_max_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
             'effective_from' => ['required', 'date'],
             'status' => ['required', Rule::in(['draft', 'published', 'archived'])],
             'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
@@ -393,9 +508,15 @@ class ProjectManagementController extends Controller
         $current = $project->terms()->latest('version')->first();
         $terms = [
             'unit_price_bdt' => number_format((float) $validated['unit_price_bdt'], 2, '.', ''),
-            'annual_rate_percent' => $validated['annual_rate_percent'] ?? null,
-            'estimated_return_min_percent' => $validated['estimated_return_min_percent'] ?? null,
-            'estimated_return_max_percent' => $validated['estimated_return_max_percent'] ?? null,
+            'annual_rate_percent' => isset($validated['annual_rate_percent'])
+                ? number_format((float) $validated['annual_rate_percent'], 2, '.', '')
+                : null,
+            'estimated_return_min_percent' => isset($validated['estimated_return_min_percent'])
+                ? number_format((float) $validated['estimated_return_min_percent'], 2, '.', '')
+                : null,
+            'estimated_return_max_percent' => isset($validated['estimated_return_max_percent'])
+                ? number_format((float) $validated['estimated_return_max_percent'], 2, '.', '')
+                : null,
             'effective_from' => $validated['effective_from'],
         ];
 
