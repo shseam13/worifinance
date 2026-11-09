@@ -26,7 +26,7 @@
             <div class="project-summary-list">
                 <div class="project-summary-row"><span>{{ __('site.withdrawals.minimum_bdt') }}</span><strong>{{ number_format((float) $minimumBdt, 2) }} BDT</strong></div>
                 @if ($minimumUsdt !== null)
-                    <div class="project-summary-row"><span>{{ __('site.withdrawals.minimum_usdt') }}</span><strong>{{ number_format((float) $minimumUsdt, 8) }} USDT</strong></div>
+                    <div class="project-summary-row"><span>{{ __('site.withdrawals.minimum_usdt') }}</span><strong>{{ number_format((float) $minimumUsdt, 2) }} USDT</strong></div>
                     <p class="admin-form-hint">{{ __('site.withdrawals.current_rate', ['rate' => $exchangeRate]) }}</p>
                 @endif
             </div>
@@ -50,7 +50,7 @@
                                 <option value="BDT" @selected(old('currency', $firstCurrency) === 'BDT')>BDT · {{ number_format($availableBdt, 2) }} {{ __('site.withdrawals.available') }}</option>
                             @endif
                             @if ($availableUsdt > 0 && $usdtEnabled)
-                                <option value="USDT" @selected(old('currency', $firstCurrency) === 'USDT')>USDT · {{ number_format($availableUsdt, 8) }} {{ __('site.withdrawals.available') }}</option>
+                                <option value="USDT" @selected(old('currency', $firstCurrency) === 'USDT')>USDT · {{ number_format($availableUsdt, 2) }} {{ __('site.withdrawals.available') }}</option>
                             @endif
                         </select>
                         @error('currency')<small class="auth-error">{{ $message }}</small>@enderror

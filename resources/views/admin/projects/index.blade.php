@@ -135,13 +135,11 @@
                                     <small>{{ trans_choice('site.admin_projects.terms_count', $project->terms_count, ['count' => $project->terms_count]) }}</small>
                                     <div class="admin-project-actions">
                                         <a class="text-link" href="{{ route('admin.projects.edit', $project) }}">{{ $project->is_sample ? __('site.admin_projects.read_only') : __('site.admin_projects.edit') }} <span aria-hidden="true">→</span></a>
-                                        @unless ($project->is_sample)
-                                            <form action="{{ route('admin.projects.destroy', $project) }}" method="post" onsubmit="return confirm(@js(__('site.admin_projects.confirm_delete')))">
-                                                @csrf
-                                                @method('delete')
-                                                <button class="button button-outline button-small admin-delete-button" type="submit">{{ __('site.admin_projects.delete_project') }}</button>
-                                            </form>
-                                        @endunless
+                                        <form action="{{ route('admin.projects.destroy', $project) }}" method="post" onsubmit="return confirm(@js(__('site.admin_projects.confirm_delete')))">
+                                            @csrf
+                                            @method('delete')
+                                            <button class="button button-outline button-small admin-delete-button" type="submit">{{ __('site.admin_projects.delete_project') }}</button>
+                                        </form>
                                     </div>
                                 </div>
                             </div>

@@ -7,6 +7,8 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class InvestorAccountManagementController extends Controller
@@ -15,7 +17,7 @@ class InvestorAccountManagementController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
-            'status' => ['nullable', Rule::in(['active', 'suspended', 'all'])],
+            'status' => ['nullable', Rule::in(['active', 'suspended', 'anonymized', 'all'])],
         ]);
         $status = $filters['status'] ?? 'all';
         $search = trim($filters['search'] ?? '');
@@ -64,6 +66,7 @@ class InvestorAccountManagementController extends Controller
             'accounts' => $query->orderByDesc('users.created_at')->paginate(20)->withQueryString(),
             'activeCount' => DB::table('users')->where('role', 'investor')->where('status', 'active')->count(),
             'suspendedCount' => DB::table('users')->where('role', 'investor')->where('status', 'suspended')->count(),
+            'anonymizedCount' => DB::table('users')->where('role', 'investor')->where('status', 'anonymized')->count(),
             'totalCount' => DB::table('users')->where('role', 'investor')->count(),
             'search' => $search,
             'status' => $status,
@@ -121,6 +124,8 @@ class InvestorAccountManagementController extends Controller
     public function update(Request $request, int $investor): RedirectResponse
     {
         $account = $this->investor($investor);
+        abort_if($account->status === 'anonymized', 403, __('site.investor_accounts.account_anonymized_read_only'));
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($account->id)],
@@ -130,6 +135,7 @@ class InvestorAccountManagementController extends Controller
         DB::transaction(function () use ($request, $account, $validated): void {
             $lockedAccount = DB::table('users')->where('id', $account->id)->lockForUpdate()->first();
             abort_if($lockedAccount === null || $lockedAccount->role !== 'investor', 404);
+            abort_if($lockedAccount->status === 'anonymized', 403, __('site.investor_accounts.account_anonymized_read_only'));
             $before = ['name' => $lockedAccount->name, 'email' => $lockedAccount->email, 'phone' => $lockedAccount->phone];
             DB::table('users')->where('id', $lockedAccount->id)->update([
                 ...$validated,
@@ -147,10 +153,12 @@ class InvestorAccountManagementController extends Controller
             'status' => ['required', Rule::in(['active', 'suspended'])],
         ]);
         $account = $this->investor($investor);
+        abort_if($account->status === 'anonymized', 403, __('site.investor_accounts.account_anonymized_read_only'));
 
         DB::transaction(function () use ($request, $account, $validated): void {
             $lockedAccount = DB::table('users')->where('id', $account->id)->lockForUpdate()->first();
             abort_if($lockedAccount === null || $lockedAccount->role !== 'investor', 404);
+            abort_if($lockedAccount->status === 'anonymized', 403, __('site.investor_accounts.account_anonymized_read_only'));
             if ($lockedAccount->status === $validated['status']) {
                 return;
             }
@@ -173,6 +181,76 @@ class InvestorAccountManagementController extends Controller
             : __('site.investor_accounts.account_activated');
 
         return redirect()->route('admin.investors.show', $account->id)->with('status', $message);
+    }
+
+    public function destroy(Request $request, int $investor): RedirectResponse
+    {
+        $account = $this->investor($investor);
+        abort_if($account->status === 'anonymized', 404);
+
+        $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'confirm_anonymization' => ['accepted'],
+        ]);
+
+        DB::transaction(function () use ($request, $account): void {
+            $lockedAccount = DB::table('users')->where('id', $account->id)->lockForUpdate()->first();
+            abort_if($lockedAccount === null || $lockedAccount->role !== 'investor', 404);
+            abort_if($lockedAccount->status === 'anonymized', 404);
+
+            $anonymousEmail = "anonymized-investor-{$lockedAccount->id}@example.invalid";
+            $suffix = 1;
+
+            while (DB::table('users')
+                ->where('email', $anonymousEmail)
+                ->where('id', '<>', $lockedAccount->id)
+                ->exists()) {
+                $anonymousEmail = "anonymized-investor-{$lockedAccount->id}-{$suffix}@example.invalid";
+                $suffix++;
+            }
+
+            DB::table('password_reset_tokens')->where('email', $lockedAccount->email)->delete();
+            DB::table('admin_audit_logs')
+                ->where('subject_type', 'investor_account')
+                ->where('subject_id', $lockedAccount->id)
+                ->where('action', 'investor_account.updated')
+                ->update([
+                    'before_values' => null,
+                    'after_values' => null,
+                ]);
+            DB::table('users')->where('id', $lockedAccount->id)->update([
+                'name' => "Anonymized investor #{$lockedAccount->id}",
+                'email' => $anonymousEmail,
+                'phone' => null,
+                'password' => Hash::make(Str::random(64)),
+                'role' => 'investor',
+                'status' => 'anonymized',
+                'email_verified_at' => null,
+                'referral_code' => null,
+                'referred_by_user_id' => null,
+                'remember_token' => Str::random(60),
+                'updated_at' => now(),
+            ]);
+
+            if (config('session.driver') === 'database') {
+                DB::connection(config('session.connection'))
+                    ->table(config('session.table', 'sessions'))
+                    ->where('user_id', $lockedAccount->id)
+                    ->delete();
+            }
+
+            $this->audit(
+                $request,
+                $lockedAccount->id,
+                'investor_account.anonymized',
+                ['status' => $lockedAccount->status],
+                ['status' => 'anonymized', 'financial_history_retained' => true],
+            );
+        });
+
+        return redirect()
+            ->route('admin.investors.show', $account->id)
+            ->with('status', __('site.investor_accounts.account_anonymized'));
     }
 
     private function investor(int $id): object

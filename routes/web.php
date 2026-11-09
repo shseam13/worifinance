@@ -57,6 +57,7 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('admin')->name('admin.')
     Route::get('/investors/{investor}', [InvestorAccountManagementController::class, 'show'])->whereNumber('investor')->name('investors.show');
     Route::put('/investors/{investor}', [InvestorAccountManagementController::class, 'update'])->whereNumber('investor')->name('investors.update');
     Route::patch('/investors/{investor}/status', [InvestorAccountManagementController::class, 'updateStatus'])->whereNumber('investor')->name('investors.status');
+    Route::delete('/investors/{investor}', [InvestorAccountManagementController::class, 'destroy'])->whereNumber('investor')->middleware('throttle:5,1')->name('investors.destroy');
     Route::get('/deposits', [DepositRequestManagementController::class, 'index'])->name('deposits.index');
     Route::post('/deposits/{deposit}/review', [DepositRequestManagementController::class, 'review'])->name('deposits.review');
     Route::get('/investments', [InvestmentManagementController::class, 'index'])->name('investments.index');

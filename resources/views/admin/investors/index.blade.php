@@ -10,10 +10,14 @@
             <h1>{{ __('site.investor_accounts.title') }}</h1>
             <p>{{ __('site.investor_accounts.description') }}</p>
         </div>
+        @if (session('status'))
+            <div class="admin-flash" role="status">{{ session('status') }}</div>
+        @endif
         <div class="portal-stat-grid admin-stat-grid">
             <article class="portal-stat-card"><span>{{ __('site.investor_accounts.total_accounts') }}</span><strong>{{ number_format($totalCount) }}</strong></article>
             <article class="portal-stat-card"><span>{{ __('site.investor_accounts.active_accounts') }}</span><strong>{{ number_format($activeCount) }}</strong></article>
             <article class="portal-stat-card"><span>{{ __('site.investor_accounts.suspended_accounts') }}</span><strong>{{ number_format($suspendedCount) }}</strong></article>
+            <article class="portal-stat-card"><span>{{ __('site.investor_accounts.anonymized_accounts') }}</span><strong>{{ number_format($anonymizedCount) }}</strong></article>
         </div>
         <section class="portal-panel">
             <form class="admin-filter-form" method="get" action="{{ route('admin.investors.index') }}">
@@ -24,7 +28,7 @@
                 <label class="admin-form-field">
                     <span>{{ __('site.investor_accounts.account_status') }}</span>
                     <select name="status">
-                        @foreach (['all', 'active', 'suspended'] as $filter)
+                        @foreach (['all', 'active', 'suspended', 'anonymized'] as $filter)
                             <option value="{{ $filter }}" @selected($status === $filter)>{{ __('site.investor_accounts.filters.'.$filter) }}</option>
                         @endforeach
                     </select>
@@ -56,7 +60,7 @@
                             @foreach ($accounts as $account)
                                 <tr>
                                     <td>
-                                        <span class="table-primary">{{ $account->name }}</span>
+                                        <span class="table-primary">{{ $account->status === 'anonymized' ? __('site.investor_accounts.anonymized_name', ['id' => $account->id]) : $account->name }}</span>
                                         <span class="table-secondary">{{ $account->email }}</span>
                                         <span class="table-secondary">{{ $account->phone ?: __('site.investor_accounts.no_phone') }}</span>
                                         @if ($account->referral_code)<span class="table-secondary">{{ __('site.investor_accounts.referral_code') }}: {{ $account->referral_code }}</span>@endif

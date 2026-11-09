@@ -173,16 +173,23 @@ class AdminProjectManagementTest extends TestCase
         $this->assertDatabaseHas('projects', ['id' => $project->id]);
     }
 
-    public function test_admin_cannot_delete_a_sample_project(): void
+    public function test_admin_can_delete_a_sample_project_and_then_delete_its_category(): void
     {
         $project = $this->createDraftProject();
         $project->forceFill(['is_sample' => true])->save();
+        $category = ProjectCategory::query()->where('name', 'Residential')->firstOrFail();
 
         $this->actingAs($this->admin())
             ->delete(route('admin.projects.destroy', $project))
-            ->assertForbidden();
+            ->assertRedirect(route('admin.projects.index'))
+            ->assertSessionHas('status', __('site.admin_projects.deleted'));
 
-        $this->assertDatabaseHas('projects', ['id' => $project->id, 'is_sample' => true]);
+        $this->assertDatabaseMissing('projects', ['id' => $project->id]);
+
+        $this->delete(route('admin.projects.categories.destroy', $category))
+            ->assertRedirect(route('admin.projects.index'));
+
+        $this->assertDatabaseMissing('project_categories', ['id' => $category->id]);
     }
 
     public function test_admin_cannot_create_a_duplicate_project_category(): void

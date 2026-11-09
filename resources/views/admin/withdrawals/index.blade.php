@@ -40,9 +40,9 @@
                                 <tr>
                                     <td><span class="table-primary">{{ $withdrawal->investor_name }}</span><span class="table-secondary">{{ $withdrawal->investor_email }}</span></td>
                                     <td>
-                                        {{ number_format((float) $withdrawal->amount, $withdrawal->currency === 'BDT' ? 2 : 8) }} {{ $withdrawal->currency }}
+                                        {{ number_format((float) $withdrawal->amount, 2) }} {{ $withdrawal->currency }}
                                         <small class="table-secondary">
-                                            {{ __('site.withdrawals.minimum_snapshot') }}: {{ number_format((float) $withdrawal->minimum_amount_snapshot, $withdrawal->currency === 'BDT' ? 2 : 8) }} {{ $withdrawal->currency }}
+                                            {{ __('site.withdrawals.minimum_snapshot') }}: {{ number_format((float) $withdrawal->minimum_amount_snapshot, 2) }} {{ $withdrawal->currency }}
                                             @if ($withdrawal->bdt_per_usdt_snapshot)
                                                 <br>{{ __('site.withdrawals.rate_snapshot') }}: 1 USDT = {{ number_format((float) $withdrawal->bdt_per_usdt_snapshot, 8) }} BDT
                                             @endif

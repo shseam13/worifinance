@@ -50,7 +50,7 @@ class CurrencyFormatter
 
     private function formatAmount(float $amount, string $currency): string
     {
-        return number_format($amount, $currency === 'BDT' ? 2 : 4).' '.$currency;
+        return number_format($amount, 2).' '.$currency;
     }
 
     private function configuredDisplayCurrency(): ?string

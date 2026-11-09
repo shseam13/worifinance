@@ -364,8 +364,6 @@ class ProjectManagementController extends Controller
 
     public function destroy(Request $request, Project $project): RedirectResponse
     {
-        abort_if($project->is_sample, 403, __('site.admin_projects.sample_read_only'));
-
         $imagePaths = [];
 
         DB::transaction(function () use ($request, $project, &$imagePaths): void {

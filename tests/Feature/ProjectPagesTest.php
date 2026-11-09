@@ -105,7 +105,7 @@ class ProjectPagesTest extends TestCase
 
         $this->get(route('projects.show', $project))
             ->assertOk()
-            ->assertSee('15.0000 USDT')
+            ->assertSee('15.00 USDT')
             ->assertDontSee('BDT 1,200.00');
 
         $this->assertDatabaseHas('project_terms', [

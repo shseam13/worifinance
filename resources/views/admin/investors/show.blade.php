@@ -28,38 +28,46 @@
         <div class="portal-two-column">
             <section class="portal-panel">
                 <div class="portal-panel-heading"><div><span class="section-eyebrow">{{ __('site.investor_accounts.profile') }}</span><h2>{{ __('site.investor_accounts.edit_profile') }}</h2></div></div>
-                <form class="admin-form-grid" action="{{ route('admin.investors.update', $account->id) }}" method="post">
-                    @csrf
-                    @method('put')
-                    <label class="admin-form-field admin-form-field-wide">
-                        <span>{{ __('site.investor_accounts.name') }}</span>
-                        <input name="name" type="text" value="{{ old('name', $account->name) }}" required maxlength="255">
-                    </label>
-                    <label class="admin-form-field admin-form-field-wide">
-                        <span>{{ __('site.investor_accounts.email') }}</span>
-                        <input name="email" type="email" value="{{ old('email', $account->email) }}" required maxlength="255">
-                    </label>
-                    <label class="admin-form-field admin-form-field-wide">
-                        <span>{{ __('site.investor_accounts.phone') }}</span>
-                        <input name="phone" type="tel" value="{{ old('phone', $account->phone) }}" maxlength="32">
-                    </label>
-                    <div class="admin-form-actions admin-form-field-wide"><button class="button button-dark" type="submit">{{ __('site.investor_accounts.save_profile') }}</button></div>
-                </form>
+                @if ($account->status === 'anonymized')
+                    <div class="portal-notice portal-notice-warning" role="status"><div><p>{{ __('site.investor_accounts.account_anonymized_read_only') }}</p></div></div>
+                @else
+                    <form class="admin-form-grid" action="{{ route('admin.investors.update', $account->id) }}" method="post">
+                        @csrf
+                        @method('put')
+                        <label class="admin-form-field admin-form-field-wide">
+                            <span>{{ __('site.investor_accounts.name') }}</span>
+                            <input name="name" type="text" value="{{ old('name', $account->name) }}" required maxlength="255">
+                        </label>
+                        <label class="admin-form-field admin-form-field-wide">
+                            <span>{{ __('site.investor_accounts.email') }}</span>
+                            <input name="email" type="email" value="{{ old('email', $account->email) }}" required maxlength="255">
+                        </label>
+                        <label class="admin-form-field admin-form-field-wide">
+                            <span>{{ __('site.investor_accounts.phone') }}</span>
+                            <input name="phone" type="tel" value="{{ old('phone', $account->phone) }}" maxlength="32">
+                        </label>
+                        <div class="admin-form-actions admin-form-field-wide"><button class="button button-dark" type="submit">{{ __('site.investor_accounts.save_profile') }}</button></div>
+                    </form>
+                @endif
             </section>
             <section class="portal-panel">
                 <div class="portal-panel-heading"><div><span class="section-eyebrow">{{ __('site.investor_accounts.account_controls') }}</span><h2>{{ __('site.investor_accounts.access_status') }}</h2></div></div>
-                <p>{{ $account->status === 'active' ? __('site.investor_accounts.active_help') : __('site.investor_accounts.suspended_help') }}</p>
-                <form action="{{ route('admin.investors.status', $account->id) }}" method="post">
-                    @csrf
-                    @method('patch')
-                    @if ($account->status === 'active')
-                        <input type="hidden" name="status" value="suspended">
-                        <button class="button button-dark" type="submit">{{ __('site.investor_accounts.suspend_account') }}</button>
-                    @else
-                        <input type="hidden" name="status" value="active">
-                        <button class="button button-dark" type="submit">{{ __('site.investor_accounts.activate_account') }}</button>
-                    @endif
-                </form>
+                @if ($account->status === 'anonymized')
+                    <p>{{ __('site.investor_accounts.account_anonymized_read_only') }}</p>
+                @else
+                    <p>{{ $account->status === 'active' ? __('site.investor_accounts.active_help') : __('site.investor_accounts.suspended_help') }}</p>
+                    <form action="{{ route('admin.investors.status', $account->id) }}" method="post">
+                        @csrf
+                        @method('patch')
+                        @if ($account->status === 'active')
+                            <input type="hidden" name="status" value="suspended">
+                            <button class="button button-dark" type="submit">{{ __('site.investor_accounts.suspend_account') }}</button>
+                        @else
+                            <input type="hidden" name="status" value="active">
+                            <button class="button button-dark" type="submit">{{ __('site.investor_accounts.activate_account') }}</button>
+                        @endif
+                    </form>
+                @endif
                 @if ($account->referral_code || $account->referred_by_user_id)
                     <dl class="account-facts">
                         <div><dt>{{ __('site.investor_accounts.referral_code') }}</dt><dd>{{ $account->referral_code ?: '—' }}</dd></div>
@@ -70,6 +78,26 @@
                 @endif
             </section>
         </div>
+        @if ($account->status !== 'anonymized')
+            <section class="portal-panel">
+                <div class="portal-panel-heading"><div><span class="section-eyebrow">{{ __('site.investor_accounts.anonymize_eyebrow') }}</span><h2>{{ __('site.investor_accounts.anonymize_title') }}</h2></div></div>
+                <div class="portal-notice portal-notice-warning" role="alert"><div><p>{{ __('site.investor_accounts.anonymize_warning') }}</p></div></div>
+                <form class="admin-form-grid" action="{{ route('admin.investors.destroy', $account->id) }}" method="post">
+                    @csrf
+                    @method('delete')
+                    <div class="admin-form-field admin-form-field-wide">
+                        <label for="current_password">{{ __('site.investor_accounts.current_admin_password') }}</label>
+                        <x-password-input id="current_password" name="current_password" autocomplete="current-password" />
+                    </div>
+                    <label class="admin-form-field admin-form-field-wide">
+                        <span><input type="checkbox" name="confirm_anonymization" value="1" required @checked(old('confirm_anonymization'))> {{ __('site.investor_accounts.confirm_anonymization') }}</span>
+                    </label>
+                    <div class="admin-form-actions admin-form-field-wide">
+                        <button class="button button-outline admin-delete-button" type="submit">{{ __('site.investor_accounts.anonymize_account') }}</button>
+                    </div>
+                </form>
+            </section>
+        @endif
         <section class="portal-panel">
             <div class="portal-panel-heading"><div><span class="section-eyebrow">{{ __('site.investor_accounts.wallets') }}</span><h2>{{ __('site.investor_accounts.wallet_balances') }}</h2></div></div>
             @if ($wallets->isEmpty())
