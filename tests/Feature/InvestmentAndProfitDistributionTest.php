@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -24,11 +25,15 @@ class InvestmentAndProfitDistributionTest extends TestCase
             ->get(route('account.projects.invest.create', $project))
             ->assertOk()
             ->assertSee('Invest in this project')
-            ->assertSee('1,000.00 BDT');
+            ->assertSee('1,000.00 BDT')
+            ->assertSee('Monthly return rate')
+            ->assertSee('USD 10.00')
+            ->assertSee('name="duration_months"', false);
 
         $this->post(route('account.projects.invest.store', $project), [
             'units' => 2,
             'currency' => 'BDT',
+            'duration_months' => 3,
         ])->assertRedirect(route('account.dashboard'));
 
         $investmentId = (int) DB::table('investments')->value('id');
@@ -38,6 +43,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
             'project_id' => $project->id,
             'unit_count' => 2,
             'amount_bdt' => '2000.00',
+            'duration_months' => 3,
             'status' => 'pending',
         ]);
         $this->assertDatabaseHas('wallet_accounts', [
@@ -91,6 +97,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
         $this->actingAs($investor)->post(route('account.projects.invest.store', $project), [
             'units' => 2,
             'currency' => 'BDT',
+            'duration_months' => 3,
         ])->assertRedirect(route('account.dashboard'));
 
         $investmentId = (int) DB::table('investments')->value('id');
@@ -101,6 +108,8 @@ class InvestmentAndProfitDistributionTest extends TestCase
         $this->assertDatabaseHas('investments', [
             'id' => $investmentId,
             'status' => 'confirmed',
+            'duration_months' => 3,
+            'matures_at' => now()->copy()->addMonthsNoOverflow(3)->toDateTimeString(),
         ]);
         $this->assertDatabaseHas('wallet_accounts', [
             'user_id' => $investor->id,
@@ -136,6 +145,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
         $this->actingAs($investor)->post(route('account.projects.invest.store', $project), [
             'units' => 1,
             'currency' => 'USDT',
+            'duration_months' => 3,
         ])->assertRedirect(route('account.dashboard'));
 
         $this->assertDatabaseHas('investments', [
@@ -146,6 +156,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
             'paid_amount' => '8.00000000',
             'exchange_rate_id' => $rateId,
             'bdt_per_usdt_snapshot' => '125.00000000',
+            'usd_bdt_rate_snapshot' => '100.00000000',
             'status' => 'pending',
         ]);
         $this->assertDatabaseHas('wallet_accounts', [
@@ -156,8 +167,140 @@ class InvestmentAndProfitDistributionTest extends TestCase
         ]);
     }
 
-    public function test_confirmed_referred_investment_creates_a_snapshot_commission_for_admin_credit(): void
+    public function test_investment_enforces_usd_amount_and_duration_limits_using_the_submission_rate(): void
     {
+        $investor = $this->investor();
+        $project = $this->project();
+        DB::table('project_terms')->where('project_id', $project->id)->update([
+            'minimum_investment_usd' => '20.00',
+            'maximum_investment_usd' => '30.00',
+            'minimum_duration_months' => 6,
+            'maximum_duration_months' => 12,
+        ]);
+        $this->wallet($investor, 'BDT', '10000.00');
+
+        $this->actingAs($investor)->post(route('account.projects.invest.store', $project), [
+            'units' => 1,
+            'currency' => 'BDT',
+            'duration_months' => 6,
+        ])->assertSessionHasErrors('units');
+
+        $this->post(route('account.projects.invest.store', $project), [
+            'units' => 4,
+            'currency' => 'BDT',
+            'duration_months' => 6,
+        ])->assertSessionHasErrors('units');
+
+        $this->post(route('account.projects.invest.store', $project), [
+            'units' => 2,
+            'currency' => 'BDT',
+            'duration_months' => 3,
+        ])->assertSessionHasErrors('duration_months');
+
+        $usdRateId = DB::table('exchange_rates')->insertGetId([
+            'base_currency' => 'USD',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '50.00000000',
+            'version' => 2,
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('project_terms')->where('project_id', $project->id)->update([
+            'maximum_investment_usd' => '40.00',
+        ]);
+
+        $this->post(route('account.projects.invest.store', $project), [
+            'units' => 2,
+            'currency' => 'BDT',
+            'duration_months' => 12,
+        ])->assertRedirect(route('account.dashboard'));
+
+        $this->assertDatabaseHas('investments', [
+            'user_id' => $investor->id,
+            'project_id' => $project->id,
+            'amount_bdt' => '2000.00',
+            'duration_months' => 12,
+            'usd_exchange_rate_id' => $usdRateId,
+            'usd_bdt_rate_snapshot' => '50.00000000',
+        ]);
+        $this->assertDatabaseHas('wallet_accounts', [
+            'user_id' => $investor->id,
+            'currency' => 'BDT',
+            'reserved_balance' => '2000.00000000',
+        ]);
+    }
+
+    public function test_confirmed_investment_matures_and_super_admin_returns_principal_once(): void
+    {
+        $this->travelTo(Carbon::parse('2026-01-31 12:00:00'));
+
+        $investor = $this->investor();
+        $admin = $this->admin();
+        $project = $this->project();
+        $this->wallet($investor, 'BDT', '5000.00');
+
+        $this->actingAs($investor)->post(route('account.projects.invest.store', $project), [
+            'units' => 1,
+            'currency' => 'BDT',
+            'duration_months' => 3,
+        ])->assertRedirect(route('account.dashboard'));
+        $investmentId = (int) DB::table('investments')->value('id');
+
+        $this->actingAs($admin)->post(route('admin.investments.review', $investmentId), [
+            'decision' => 'confirmed',
+        ])->assertRedirect(route('admin.investments.index'));
+
+        $this->assertDatabaseHas('investments', [
+            'id' => $investmentId,
+            'status' => 'confirmed',
+            'matures_at' => '2026-04-30 12:00:00',
+        ]);
+        $this->actingAs($admin)
+            ->get(route('admin.investments.index', ['status' => 'matured']))
+            ->assertOk()
+            ->assertSee('There are no investment requests in this list.')
+            ->assertDontSee('Review and return principal');
+
+        $this->post(route('admin.investments.return-principal', $investmentId))
+            ->assertStatus(409);
+
+        $this->travelTo(Carbon::parse('2026-04-30 12:00:01'));
+        $this->get(route('admin.investments.index', ['status' => 'matured']))
+            ->assertOk()
+            ->assertSee('Review and return principal');
+
+        $this->post(route('admin.investments.return-principal', $investmentId))
+            ->assertRedirect(route('admin.investments.index', ['status' => 'matured']));
+
+        $this->assertDatabaseHas('investments', [
+            'id' => $investmentId,
+            'principal_returned_at' => '2026-04-30 12:00:01',
+        ]);
+        $this->assertDatabaseHas('wallet_accounts', [
+            'user_id' => $investor->id,
+            'currency' => 'BDT',
+            'balance' => '5000.00000000',
+        ]);
+        $this->assertDatabaseHas('ledger_transactions', [
+            'idempotency_key' => 'investment-principal-return:'.$investmentId,
+            'type' => 'investment_principal_return',
+        ]);
+        $this->assertDatabaseHas('ledger_entries', [
+            'entry_type' => 'investment_principal_return',
+            'amount' => '1000.00000000',
+            'balance_after' => '5000.00000000',
+        ]);
+
+        $this->post(route('admin.investments.return-principal', $investmentId))
+            ->assertStatus(409);
+        $this->assertDatabaseCount('ledger_transactions', 3);
+    }
+
+    public function test_confirmed_referred_investment_creates_a_snapshot_commission_that_becomes_eligible_after_the_hold_period(): void
+    {
+        $this->travelTo(Carbon::parse('2026-04-20 12:00:00'));
+
         $admin = $this->admin();
         $referrer = $this->investor();
         $referredInvestor = $this->investor();
@@ -172,10 +315,13 @@ class InvestmentAndProfitDistributionTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        $this->approvedDeposit($referredInvestor, '2026-01-15 12:00:00');
+        $this->paidWithdrawal($referredInvestor, '2026-04-16 12:00:00');
 
         $this->actingAs($referredInvestor)->post(route('account.projects.invest.store', $project), [
             'units' => 1,
             'currency' => 'BDT',
+            'duration_months' => 3,
         ])->assertRedirect(route('account.dashboard'));
         $investmentId = (int) DB::table('investments')->value('id');
 
@@ -230,8 +376,80 @@ class InvestmentAndProfitDistributionTest extends TestCase
         $this->assertDatabaseCount('ledger_transactions', 3);
     }
 
+    public function test_referral_commissions_wait_for_three_months_after_the_next_approved_deposit_following_a_withdrawal(): void
+    {
+        $this->travelTo(Carbon::parse('2026-04-20 12:00:00'));
+
+        $admin = $this->admin();
+        $referrer = $this->investor();
+        $referredInvestor = $this->investor();
+        $referredInvestor->forceFill(['referred_by_user_id' => $referrer->id])->save();
+        $project = $this->project();
+        $this->wallet($referredInvestor, 'BDT', '3000.00');
+        DB::table('platform_settings')->insert([
+            'key' => 'platform.referral_commission_percent',
+            'version' => 1,
+            'value' => '5.0000',
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $investmentIds = [
+            $this->confirmReferredInvestment($admin, $referredInvestor, $project),
+            $this->confirmReferredInvestment($admin, $referredInvestor, $project),
+        ];
+        $commissionIds = DB::table('referral_commissions')
+            ->whereIn('investment_id', $investmentIds)
+            ->pluck('id')
+            ->all();
+        $ledgerTransactionCount = DB::table('ledger_transactions')->count();
+
+        $this->actingAs($admin)
+            ->post(route('admin.referrals.credit', $commissionIds[0]), ['decision' => 'credit'])
+            ->assertStatus(409);
+
+        $this->approvedDeposit($referredInvestor, '2026-01-15 12:00:00');
+        $this->paidWithdrawal($referredInvestor, '2026-02-01 12:00:00');
+        $this->approvedDeposit($referredInvestor, '2026-03-01 12:00:00');
+
+        foreach ($commissionIds as $commissionId) {
+            $this->actingAs($admin)
+                ->post(route('admin.referrals.credit', $commissionId), ['decision' => 'credit'])
+                ->assertStatus(409);
+            $this->assertDatabaseHas('referral_commissions', [
+                'id' => $commissionId,
+                'status' => 'pending',
+            ]);
+        }
+
+        $this->assertDatabaseMissing('wallet_accounts', [
+            'user_id' => $referrer->id,
+            'currency' => 'BDT',
+        ]);
+        $this->assertSame($ledgerTransactionCount, DB::table('ledger_transactions')->count());
+
+        $this->travelTo(Carbon::parse('2026-06-01 12:00:00'));
+
+        foreach ($commissionIds as $commissionId) {
+            $this->actingAs($admin)
+                ->post(route('admin.referrals.credit', $commissionId), ['decision' => 'credit'])
+                ->assertRedirect(route('admin.referrals.index'));
+        }
+
+        $this->assertDatabaseCount('referral_commissions', 2);
+        $this->assertDatabaseHas('wallet_accounts', [
+            'user_id' => $referrer->id,
+            'currency' => 'BDT',
+            'balance' => '100.00000000',
+        ]);
+        $this->assertSame($ledgerTransactionCount + 2, DB::table('ledger_transactions')->count());
+    }
+
     public function test_confirmed_referred_investment_creates_a_fixed_bdt_commission_snapshot(): void
     {
+        $this->travelTo(Carbon::parse('2026-04-15 12:00:00'));
+
         $admin = $this->admin();
         $referrer = $this->investor();
         $referredInvestor = $this->investor();
@@ -256,10 +474,12 @@ class InvestmentAndProfitDistributionTest extends TestCase
                 'updated_at' => now(),
             ],
         ]);
+        $this->approvedDeposit($referredInvestor, '2026-01-15 12:00:00');
 
         $this->actingAs($referredInvestor)->post(route('account.projects.invest.store', $project), [
             'units' => 1,
             'currency' => 'BDT',
+            'duration_months' => 3,
         ])->assertRedirect(route('account.dashboard'));
         $investmentId = (int) DB::table('investments')->value('id');
 
@@ -295,7 +515,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
     {
         $admin = $this->admin();
         $investor = $this->investor();
-        $project = $this->project('12.0000');
+        $project = $this->project('12.0000', legacyAnnual: true);
         $oldTermId = (int) DB::table('project_terms')->where('project_id', $project->id)->value('id');
         $this->term($project, 2, '50.0000');
         $periodStart = today()->subDays(365);
@@ -347,7 +567,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
             ->get(route('admin.profit-distributions.index'))
             ->assertOk()
             ->assertSee($investor->email)
-            ->assertSee('12.0000%');
+            ->assertSee('12.00% / year');
 
         $this->actingAs($investor)
             ->get(route('account.dashboard'))
@@ -388,14 +608,116 @@ class InvestmentAndProfitDistributionTest extends TestCase
             ->assertDontSee(__('site.auth.no_profit_history'));
     }
 
+    public function test_monthly_profit_distribution_prorates_first_and_final_months_and_stops_at_maturity(): void
+    {
+        $this->travelTo(Carbon::parse('2026-05-01 10:00:00'));
+
+        $admin = $this->admin();
+        $project = $this->project('10.0000');
+        $termId = (int) DB::table('project_terms')->where('project_id', $project->id)->value('id');
+        $firstMonthInvestor = $this->investor();
+        $finalMonthInvestor = $this->investor();
+        $investments = [
+            [
+                'user_id' => $firstMonthInvestor->id,
+                'confirmed_at' => '2026-04-15 12:00:00',
+                'matures_at' => '2026-07-15 12:00:00',
+            ],
+            [
+                'user_id' => $finalMonthInvestor->id,
+                'confirmed_at' => '2026-01-15 12:00:00',
+                'matures_at' => '2026-04-15 12:00:00',
+            ],
+        ];
+
+        foreach ($investments as $investment) {
+            DB::table('investments')->insert([
+                ...$investment,
+                'project_id' => $project->id,
+                'project_term_id' => $termId,
+                'unit_count' => 10,
+                'unit_price_bdt' => '1000.00',
+                'amount_bdt' => '10000.00',
+                'payment_currency' => 'BDT',
+                'paid_amount' => '10000.00000000',
+                'duration_months' => 3,
+                'status' => 'confirmed',
+                'created_at' => $investment['confirmed_at'],
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($admin)->post(route('admin.profit-distributions.store'), [
+            'project_id' => $project->id,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+            'payout_currency' => 'BDT',
+        ])->assertRedirect(route('admin.profit-distributions.index'));
+
+        $distribution = DB::table('profit_distributions')->first();
+        $this->assertNotNull($distribution);
+        $this->assertDatabaseHas('profit_distributions', [
+            'id' => $distribution->id,
+            'annual_rate_snapshot' => null,
+            'monthly_rate_snapshot' => '10.0000',
+        ]);
+        $this->assertDatabaseHas('distribution_items', [
+            'profit_distribution_id' => $distribution->id,
+            'investment_id' => DB::table('investments')->where('user_id', $firstMonthInvestor->id)->value('id'),
+            'annual_rate_snapshot' => null,
+            'monthly_rate_snapshot' => '10.0000',
+            'eligible_days' => 16,
+            'amount' => '533.33',
+        ]);
+        $this->assertDatabaseHas('distribution_items', [
+            'profit_distribution_id' => $distribution->id,
+            'investment_id' => DB::table('investments')->where('user_id', $finalMonthInvestor->id)->value('id'),
+            'monthly_rate_snapshot' => '10.0000',
+            'eligible_days' => 14,
+            'amount' => '466.67',
+        ]);
+    }
+
+    public function test_monthly_profit_distribution_requires_a_complete_calendar_month(): void
+    {
+        $this->travelTo(Carbon::parse('2026-05-01 10:00:00'));
+
+        $admin = $this->admin();
+        $investor = $this->investor();
+        $project = $this->project();
+        DB::table('investments')->insert([
+            'user_id' => $investor->id,
+            'project_id' => $project->id,
+            'project_term_id' => $project->terms()->value('id'),
+            'unit_count' => 1,
+            'unit_price_bdt' => '1000.00',
+            'amount_bdt' => '1000.00',
+            'payment_currency' => 'BDT',
+            'paid_amount' => '1000.00000000',
+            'status' => 'confirmed',
+            'confirmed_at' => '2026-04-01 00:00:00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->post(route('admin.profit-distributions.store'), [
+            'project_id' => $project->id,
+            'period_start' => '2026-04-02',
+            'period_end' => '2026-04-30',
+            'payout_currency' => 'BDT',
+        ])->assertSessionHasErrors('period_start');
+
+        $this->assertDatabaseCount('profit_distributions', 0);
+    }
+
     public function test_profit_distribution_rejects_overlapping_periods(): void
     {
         $admin = $this->admin();
         $investor = $this->investor();
         $project = $this->project();
         $termId = (int) DB::table('project_terms')->where('project_id', $project->id)->value('id');
-        $periodStart = today()->subDays(30);
-        $periodEnd = today()->subDay();
+        $periodStart = today()->startOfMonth()->subMonth();
+        $periodEnd = $periodStart->copy()->endOfMonth();
         DB::table('investments')->insert([
             'user_id' => $investor->id,
             'project_id' => $project->id,
@@ -419,7 +741,6 @@ class InvestmentAndProfitDistributionTest extends TestCase
 
         $this->actingAs($admin)->post(route('admin.profit-distributions.store'), $payload)
             ->assertRedirect(route('admin.profit-distributions.index'));
-        $payload['period_start'] = $periodStart->copy()->addDays(10)->toDateString();
         $this->post(route('admin.profit-distributions.store'), $payload)
             ->assertSessionHasErrors('period_start');
 
@@ -442,7 +763,7 @@ class InvestmentAndProfitDistributionTest extends TestCase
         return $user;
     }
 
-    private function project(string $rate = '10.0000'): Project
+    private function project(string $rate = '10.0000', bool $legacyAnnual = false): Project
     {
         $project = new Project;
         $project->forceFill([
@@ -453,12 +774,33 @@ class InvestmentAndProfitDistributionTest extends TestCase
             'status' => 'published',
             'target_units' => 10,
             'available_units' => 5,
-            'is_sample' => false,
             'published_at' => now()->subMinute(),
         ])->save();
-        $this->term($project, 1, $rate);
+        $this->usdExchangeRate();
+        if ($legacyAnnual) {
+            $this->term($project, 1, $rate);
+        } else {
+            $this->monthlyTerm($project, 1, $rate);
+        }
 
         return $project;
+    }
+
+    private function monthlyTerm(Project $project, int $version, string $rate): int
+    {
+        return DB::table('project_terms')->insertGetId([
+            'project_id' => $project->id,
+            'version' => $version,
+            'unit_price_bdt' => '1000.00',
+            'monthly_rate_percent' => $rate,
+            'minimum_investment_usd' => '10.00',
+            'maximum_investment_usd' => '10000.00',
+            'minimum_duration_months' => 3,
+            'maximum_duration_months' => 24,
+            'effective_from' => today()->subYear()->toDateString(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function term(Project $project, int $version, string $rate): int
@@ -486,6 +828,58 @@ class InvestmentAndProfitDistributionTest extends TestCase
         ]);
     }
 
+    private function approvedDeposit(User $user, string $reviewedAt): void
+    {
+        DB::table('deposit_requests')->insert([
+            'user_id' => $user->id,
+            'currency' => 'BDT',
+            'amount' => '1000.00000000',
+            'payment_reference' => 'referral-deposit-'.$user->id.'-'.Str::random(8),
+            'status' => 'approved',
+            'reviewed_at' => $reviewedAt,
+            'created_at' => $reviewedAt,
+            'updated_at' => $reviewedAt,
+        ]);
+    }
+
+    private function paidWithdrawal(User $user, string $reviewedAt): void
+    {
+        DB::table('withdrawal_requests')->insert([
+            'user_id' => $user->id,
+            'currency' => 'BDT',
+            'amount' => '100.00000000',
+            'minimum_amount_snapshot' => '100.00',
+            'destination' => 'Test withdrawal destination',
+            'status' => 'paid',
+            'payout_reference' => 'referral-withdrawal-'.$user->id.'-'.Str::random(8),
+            'reviewed_at' => $reviewedAt,
+            'created_at' => $reviewedAt,
+            'updated_at' => $reviewedAt,
+        ]);
+    }
+
+    private function confirmReferredInvestment(User $admin, User $referredInvestor, Project $project): int
+    {
+        $this->actingAs($referredInvestor)
+            ->post(route('account.projects.invest.store', $project), [
+                'units' => 1,
+                'currency' => 'BDT',
+                'duration_months' => 3,
+            ])
+            ->assertRedirect(route('account.dashboard'));
+
+        $investmentId = (int) DB::table('investments')
+            ->where('user_id', $referredInvestor->id)
+            ->latest('id')
+            ->value('id');
+
+        $this->actingAs($admin)
+            ->post(route('admin.investments.review', $investmentId), ['decision' => 'confirmed'])
+            ->assertRedirect(route('admin.investments.index'));
+
+        return $investmentId;
+    }
+
     private function exchangeRate(string $rate, int $version): int
     {
         return DB::table('exchange_rates')->insertGetId([
@@ -493,6 +887,23 @@ class InvestmentAndProfitDistributionTest extends TestCase
             'quote_currency' => 'BDT',
             'quote_per_base' => $rate,
             'version' => $version,
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function usdExchangeRate(): void
+    {
+        if (DB::table('exchange_rates')->where('base_currency', 'USD')->exists()) {
+            return;
+        }
+
+        DB::table('exchange_rates')->insert([
+            'base_currency' => 'USD',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '100.00000000',
+            'version' => 1,
             'effective_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),

@@ -4,7 +4,7 @@
 
 @section('content')
     <section class="portal-section">
-        <div class="portal-heading portal-heading-row">
+        <div class="portal-heading portal-heading-row" id="profile">
             <div>
                 <span class="section-eyebrow">{{ __('site.auth.investor_portal') }}</span>
                 <h1>{{ __('site.auth.hello', ['name' => auth()->user()->name]) }}</h1>
@@ -101,7 +101,10 @@
                     <span class="section-eyebrow">{{ __('site.auth.portfolio') }}</span>
                     <h2>{{ __('site.auth.my_investments') }}</h2>
                 </div>
-                <a class="text-link" href="{{ route('projects.index') }}">{{ __('site.auth.browse_projects') }} <span aria-hidden="true">→</span></a>
+                <div class="portal-heading-actions">
+                    <a class="text-link" href="{{ route('account.investments.index') }}">{{ __('site.investor_portfolio.title') }} <span aria-hidden="true">→</span></a>
+                    <a class="text-link" href="{{ route('projects.index') }}">{{ __('site.auth.browse_projects') }} <span aria-hidden="true">→</span></a>
+                </div>
             </div>
             @if ($investments->isEmpty())
                 <p class="portal-empty">{{ __('site.auth.no_investments') }}</p>
@@ -114,6 +117,8 @@
                                 <th>{{ __('site.auth.units') }}</th>
                                 <th>{{ __('site.auth.principal_bdt') }}</th>
                                 <th>{{ __('site.auth.paid_amount') }}</th>
+                                <th>{{ __('site.investments.duration') }}</th>
+                                <th>{{ __('site.investments.maturity') }}</th>
                                 <th>{{ __('site.auth.status') }}</th>
                             </tr>
                         </thead>
@@ -124,6 +129,8 @@
                                     <td>{{ number_format((int) $investment->unit_count) }}</td>
                                     <td>@money($investment->amount_bdt, 'BDT')</td>
                                     <td>@money($investment->paid_amount, $investment->payment_currency)</td>
+                                    <td>{{ $investment->duration_months ? $investment->duration_months.' '.__('site.projects.months') : '—' }}@if ($investment->duration_months)<small class="table-secondary">{{ __('site.investments.locked') }}</small>@endif</td>
+                                    <td>{{ $investment->matures_at ? \Illuminate\Support\Carbon::parse($investment->matures_at)->format('M j, Y') : '—' }}@if ($investment->principal_returned_at)<small class="table-secondary">{{ __('site.investments.principal_returned_status') }}</small>@endif</td>
                                     <td><span class="status-pill status-{{ \Illuminate\Support\Str::slug($investment->status) }}">{{ __('site.auth.statuses.'.$investment->status) }}</span></td>
                                 </tr>
                             @endforeach
@@ -227,6 +234,11 @@
                 <div>
                     <span class="section-eyebrow">{{ __('site.auth.account_activity') }}</span>
                     <h2>{{ __('site.auth.profit_history') }}</h2>
+                </div>
+                <div class="portal-heading-actions">
+                    <a class="text-link" href="{{ route('account.profit-wallet') }}">{{ __('site.investor_activity.profit_wallet_title') }} <span aria-hidden="true">→</span></a>
+                    <a class="text-link" href="{{ route('account.profit-history') }}">{{ __('site.investor_activity.profit_history_title') }} <span aria-hidden="true">→</span></a>
+                    <a class="text-link" href="{{ route('account.transactions.index') }}">{{ __('site.investor_activity.view_transactions') }} <span aria-hidden="true">→</span></a>
                 </div>
             </div>
             @if ($profitHistory->isEmpty())

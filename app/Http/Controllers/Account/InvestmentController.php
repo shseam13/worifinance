@@ -23,7 +23,13 @@ class InvestmentController extends Controller
             404,
         );
         $project->load('currentTerms');
-        abort_unless($project->currentTerms?->annual_rate_percent !== null, 404);
+        $term = $project->currentTerms;
+        abort_unless(
+            $term?->monthly_rate_percent !== null
+                && $term->minimum_investment_usd !== null
+                && $term->maximum_investment_usd !== null,
+            404,
+        );
 
         return view('account.investments.create', [
             'pendingDeposits' => DB::table('deposit_requests')->where('status', 'pending')->count(),
@@ -39,6 +45,11 @@ class InvestmentController extends Controller
                 ->where('quote_currency', 'BDT')
                 ->orderByDesc('version')
                 ->value('quote_per_base'),
+            'usdExchangeRate' => DB::table('exchange_rates')
+                ->where('base_currency', 'USD')
+                ->where('quote_currency', 'BDT')
+                ->orderByDesc('version')
+                ->value('quote_per_base'),
         ]);
     }
 
@@ -47,6 +58,7 @@ class InvestmentController extends Controller
         $validated = $request->validate([
             'units' => ['required', 'integer', 'min:1', 'max:'.PHP_INT_MAX],
             'currency' => ['required', Rule::in(['BDT', 'USDT'])],
+            'duration_months' => ['required', 'integer', 'min:3', 'max:24'],
         ]);
 
         DB::transaction(function () use ($request, $project, $validated): void {
@@ -66,13 +78,27 @@ class InvestmentController extends Controller
 
             $term = $project->currentTerms;
 
-            if ($term === null || $term->annual_rate_percent === null) {
+            if (
+                $term === null
+                || $term->monthly_rate_percent === null
+                || $term->minimum_investment_usd === null
+                || $term->maximum_investment_usd === null
+            ) {
                 throw ValidationException::withMessages([
                     'project' => __('site.investments.terms_unavailable'),
                 ]);
             }
 
             $units = (int) $validated['units'];
+            $minimumDuration = (int) ($term->minimum_duration_months ?? 3);
+            $maximumDuration = (int) ($term->maximum_duration_months ?? 24);
+            $durationMonths = (int) $validated['duration_months'];
+
+            if ($durationMonths < $minimumDuration || $durationMonths > $maximumDuration) {
+                throw ValidationException::withMessages([
+                    'duration_months' => __('site.investments.duration_unavailable'),
+                ]);
+            }
 
             if ($units > $project->available_units) {
                 throw ValidationException::withMessages([
@@ -88,6 +114,37 @@ class InvestmentController extends Controller
             if ($this->integerDigits($amountBdt) > 18) {
                 throw ValidationException::withMessages([
                     'units' => __('site.investments.amount_too_large'),
+                ]);
+            }
+
+            $usdExchangeRate = DB::table('exchange_rates')
+                ->where('base_currency', 'USD')
+                ->where('quote_currency', 'BDT')
+                ->orderByDesc('version')
+                ->lockForUpdate()
+                ->first();
+
+            if ($usdExchangeRate === null || (float) $usdExchangeRate->quote_per_base <= 0) {
+                throw ValidationException::withMessages([
+                    'currency' => __('site.investments.usd_exchange_rate_unavailable'),
+                ]);
+            }
+
+            $withinUsdLimits = DB::selectOne(
+                'SELECT CASE WHEN CAST(? AS DECIMAL(20,2)) >= CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(20,8)) AND CAST(? AS DECIMAL(20,2)) <= CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(20,8)) THEN 1 ELSE 0 END AS allowed',
+                [
+                    $amountBdt,
+                    $term->minimum_investment_usd,
+                    $usdExchangeRate->quote_per_base,
+                    $amountBdt,
+                    $term->maximum_investment_usd,
+                    $usdExchangeRate->quote_per_base,
+                ],
+            );
+
+            if ((int) ($withinUsdLimits?->allowed ?? 0) !== 1) {
+                throw ValidationException::withMessages([
+                    'units' => __('site.investments.amount_outside_limits'),
                 ]);
             }
 
@@ -168,6 +225,9 @@ class InvestmentController extends Controller
                 'paid_amount' => $paidAmount,
                 'exchange_rate_id' => $exchangeRate?->id,
                 'bdt_per_usdt_snapshot' => $exchangeRate?->quote_per_base,
+                'usd_exchange_rate_id' => $usdExchangeRate->id,
+                'usd_bdt_rate_snapshot' => $usdExchangeRate->quote_per_base,
+                'duration_months' => $durationMonths,
                 'status' => 'pending',
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -186,6 +246,9 @@ class InvestmentController extends Controller
                     'paid_amount' => $paidAmount,
                     'currency' => $validated['currency'],
                     'bdt_per_usdt_snapshot' => $exchangeRate?->quote_per_base,
+                    'usd_exchange_rate_id' => $usdExchangeRate->id,
+                    'usd_bdt_rate_snapshot' => $usdExchangeRate->quote_per_base,
+                    'duration_months' => $durationMonths,
                 ], JSON_THROW_ON_ERROR),
                 'created_by_user_id' => $request->user()->id,
                 'created_at' => now(),
@@ -216,6 +279,9 @@ class InvestmentController extends Controller
                     'amount_bdt' => $amountBdt,
                     'paid_amount' => $paidAmount,
                     'currency' => $validated['currency'],
+                    'duration_months' => $durationMonths,
+                    'usd_exchange_rate_id' => $usdExchangeRate->id,
+                    'usd_bdt_rate_snapshot' => $usdExchangeRate->quote_per_base,
                     'status' => 'pending',
                 ], JSON_THROW_ON_ERROR),
                 'ip_address' => $request->ip(),

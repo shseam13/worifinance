@@ -272,7 +272,6 @@ class DashboardPagesTest extends TestCase
             'available_units' => 100,
             'status' => 'published',
             'published_at' => now(),
-            'is_sample' => false,
         ])->save();
 
         $term = new ProjectTerm;

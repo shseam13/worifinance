@@ -12,7 +12,7 @@
 </head>
 <body>
     <a class="skip-link" href="#main-content">{{ __('site.skip_link') }}</a>
-    <header class="site-header {{ request()->routeIs('home') ? 'site-header-home' : '' }}">
+    <header class="site-header {{ request()->routeIs('home', 'about') ? 'site-header-home' : '' }}">
         <div class="header-shell">
             <a class="brand" href="{{ route('home') }}" aria-label="{{ __('site.site_name') }} — {{ __('site.nav.home') }}">
                 <span class="brand-mark"><img src="{{ asset('images/worifinance.jpg') }}" alt="" width="44" height="44"></span>
@@ -26,7 +26,7 @@
                 <a class="{{ request()->routeIs('home') ? 'is-active' : '' }}" href="{{ route('home') }}">{{ __('site.nav.home') }}</a>
                 <a class="{{ request()->routeIs('projects.*') ? 'is-active' : '' }}" href="{{ route('projects.index') }}">{{ __('site.nav.projects') }}</a>
                 <a href="{{ route('home') }}#how-it-works">{{ __('site.nav.how_it_works') }}</a>
-                <a href="{{ route('home') }}#about-worifinance">{{ __('site.landing.about_label') }}</a>
+                <a class="{{ request()->routeIs('about') ? 'is-active' : '' }}" href="{{ route('about') }}">{{ __('site.landing.about_label') }}</a>
                 @auth
                     <a href="{{ auth()->user()->role === 'super_admin' ? route('admin.dashboard') : route('account.dashboard') }}">{{ __('site.auth.dashboard') }}</a>
                 @endauth
@@ -57,14 +57,27 @@
             </div>
         </div>
         <nav class="mobile-menu" id="mobile-menu" hidden aria-label="{{ __('site.nav.menu') }}">
-            <a href="{{ route('home') }}">{{ __('site.nav.home') }}</a>
-            <a href="{{ route('projects.index') }}">{{ __('site.nav.projects') }}</a>
-            <a href="{{ route('home') }}#how-it-works">{{ __('site.nav.how_it_works') }}</a>
+            <a class="{{ request()->routeIs('home') ? 'is-active' : '' }}" href="{{ route('home') }}">{{ __('site.nav.home') }}</a>
+            <a class="{{ request()->routeIs('about') ? 'is-active' : '' }}" href="{{ route('about') }}">{{ __('site.landing.about_label') }}</a>
             @guest
+                <a href="{{ route('home') }}#contact">{{ __('site.nav.contact_us') }}</a>
                 <a href="{{ route('login') }}">{{ __('site.auth.login') }}</a>
                 <a href="{{ route('register') }}">{{ __('site.auth.register') }}</a>
             @else
-                <a href="{{ auth()->user()->role === 'super_admin' ? route('admin.dashboard') : route('account.dashboard') }}">{{ __('site.auth.dashboard') }}</a>
+                @if (auth()->user()->role === 'super_admin')
+                    <a href="{{ route('admin.transactions.index') }}">{{ __('site.nav.transactions') }}</a>
+                    <a href="{{ route('admin.referrals.index') }}">{{ __('site.nav.referral_reward') }}</a>
+                    <a href="{{ route('admin.dashboard') }}#profile">{{ __('site.nav.my_profile') }}</a>
+                @else
+                    <a href="{{ route('account.transactions.index') }}">{{ __('site.nav.transactions') }}</a>
+                    <a href="{{ route('account.dashboard') }}#referrals">{{ __('site.nav.referral_reward') }}</a>
+                    <a href="{{ route('account.dashboard') }}#profile">{{ __('site.nav.my_profile') }}</a>
+                @endif
+                <a href="{{ route('home') }}#contact">{{ __('site.nav.contact_us') }}</a>
+                <form action="{{ route('logout') }}" method="post">
+                    @csrf
+                    <button type="submit">{{ __('site.auth.logout') }}</button>
+                </form>
             @endguest
         </nav>
     </header>
@@ -73,7 +86,7 @@
         @yield('content')
     </main>
 
-    <footer class="site-footer">
+    <footer class="site-footer" id="contact">
         <div class="footer-main">
             <div class="footer-brand-column">
                 <a class="brand footer-brand" href="{{ route('home') }}">
@@ -88,7 +101,7 @@
             <div class="footer-link-group">
                 <h2>{{ __('site.footer.company') }}</h2>
                 <a href="{{ route('home') }}#how-it-works">{{ __('site.nav.how_it_works') }}</a>
-                <a href="{{ route('home') }}#about-worifinance">{{ __('site.landing.about_label') }}</a>
+                <a href="{{ route('about') }}">{{ __('site.landing.about_label') }}</a>
                 <a href="{{ route('home') }}#clarity">{{ __('site.clarity.eyebrow') }}</a>
             </div>
             <div class="footer-link-group">

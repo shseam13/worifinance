@@ -51,6 +51,7 @@ class ProfitDistributionManagementController extends Controller
                 'distribution_items.profit_distribution_id',
                 'distribution_items.eligible_principal_bdt',
                 'distribution_items.annual_rate_snapshot',
+                'distribution_items.monthly_rate_snapshot',
                 'distribution_items.eligible_days',
                 'distribution_items.payout_currency',
                 'distribution_items.amount',
@@ -81,7 +82,9 @@ class ProfitDistributionManagementController extends Controller
         $projects = Project::query()
             ->whereIn('id', $projectIds)
             ->where('is_sample', false)
-            ->whereHas('terms', fn ($query) => $query->whereNotNull('annual_rate_percent'))
+            ->whereHas('terms', fn ($query) => $query
+                ->whereNotNull('monthly_rate_percent')
+                ->orWhereNotNull('annual_rate_percent'))
             ->orderBy('name')
             ->get()
             ->values();
@@ -97,8 +100,8 @@ class ProfitDistributionManagementController extends Controller
                 ->where('quote_currency', 'BDT')
                 ->orderByDesc('version')
                 ->value('quote_per_base'),
-            'defaultEnd' => today()->subDay()->toDateString(),
-            'defaultStart' => today()->subMonth()->toDateString(),
+            'defaultEnd' => today()->startOfMonth()->subDay()->toDateString(),
+            'defaultStart' => today()->startOfMonth()->subMonth()->toDateString(),
         ]);
     }
 
@@ -117,7 +120,10 @@ class ProfitDistributionManagementController extends Controller
 
             $term = DB::table('project_terms')
                 ->where('project_id', $project->id)
-                ->whereNotNull('annual_rate_percent')
+                ->where(function ($query): void {
+                    $query->whereNotNull('monthly_rate_percent')
+                        ->orWhereNotNull('annual_rate_percent');
+                })
                 ->orderByDesc('version')
                 ->lockForUpdate()
                 ->first();
@@ -129,6 +135,12 @@ class ProfitDistributionManagementController extends Controller
 
             $periodStart = Carbon::parse($validated['period_start'])->startOfDay();
             $periodEnd = Carbon::parse($validated['period_end'])->endOfDay();
+            $monthlyDistribution = $term->monthly_rate_percent !== null;
+            $fullCalendarMonth = $periodStart->day === 1
+                && $periodStart->format('Y-m') === $periodEnd->format('Y-m')
+                && $periodEnd->day === $periodEnd->daysInMonth
+                && $periodEnd->isPast();
+
             $overlapExists = DB::table('profit_distributions')
                 ->where('project_id', $project->id)
                 ->whereDate('period_start', '<=', $periodEnd->toDateString())
@@ -165,35 +177,73 @@ class ProfitDistributionManagementController extends Controller
                     'investments.id',
                     'investments.amount_bdt',
                     'investments.confirmed_at',
+                    'investments.matures_at',
                     'project_terms.annual_rate_percent',
+                    'project_terms.monthly_rate_percent',
                 ])
                 ->orderBy('investments.id')
                 ->lockForUpdate()
                 ->get();
 
+            if (
+                ($monthlyDistribution || $eligibleInvestments->contains(
+                    fn (object $investment): bool => $investment->monthly_rate_percent !== null,
+                ))
+                && ! $fullCalendarMonth
+            ) {
+                throw ValidationException::withMessages([
+                    'period_start' => __('site.profit_distributions.monthly_period_required'),
+                ]);
+            }
+
             $allocations = [];
             foreach ($eligibleInvestments as $investment) {
-                if ($investment->annual_rate_percent === null) {
+                if ($investment->annual_rate_percent === null && $investment->monthly_rate_percent === null) {
                     throw ValidationException::withMessages([
                         'project_id' => __('site.profit_distributions.investment_rate_unavailable'),
                     ]);
                 }
 
                 $eligibleStart = Carbon::parse($investment->confirmed_at)->startOfDay()->max($periodStart);
-                if ($eligibleStart->greaterThan($periodEnd)) {
+                $eligibleEnd = $periodEnd->copy();
+                if ($investment->matures_at !== null) {
+                    $lastEligibleDay = Carbon::parse($investment->matures_at)->startOfDay()->subDay()->endOfDay();
+                    if ($lastEligibleDay->lessThan($eligibleEnd)) {
+                        $eligibleEnd = $lastEligibleDay;
+                    }
+                }
+
+                if ($eligibleStart->greaterThan($eligibleEnd)) {
                     continue;
                 }
 
-                $eligibleDays = (int) $eligibleStart->diffInDays($periodEnd->copy()->startOfDay()) + 1;
-                $sql = $validated['payout_currency'] === 'BDT'
-                    ? 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? / 36500, 2) AS CHAR) AS amount'
-                    : 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? / (36500 * CAST(? AS DECIMAL(20,8))), 8) AS CHAR) AS amount';
+                $eligibleDays = (int) $eligibleStart->diffInDays($eligibleEnd->copy()->startOfDay()) + 1;
+                $monthlyRate = $investment->monthly_rate_percent;
+                $rate = $monthlyRate ?? $investment->annual_rate_percent;
+                $denominator = $monthlyRate === null ? 36500 : 100 * $periodStart->daysInMonth;
+                $sql = $monthlyRate === null
+                    ? (
+                        $validated['payout_currency'] === 'BDT'
+                            ? 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? / 36500, 2) AS CHAR) AS amount'
+                            : 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? / (36500 * CAST(? AS DECIMAL(20,8))), 8) AS CHAR) AS amount'
+                    )
+                    : (
+                        $validated['payout_currency'] === 'BDT'
+                            ? 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? * 1.0 / ?, 2) AS CHAR) AS amount'
+                            : 'SELECT CAST(ROUND(CAST(? AS DECIMAL(20,2)) * CAST(? AS DECIMAL(8,4)) * ? * 1.0 / (? * CAST(? AS DECIMAL(20,8))), 8) AS CHAR) AS amount'
+                    );
                 $bindings = [
                     $investment->amount_bdt,
-                    $investment->annual_rate_percent,
+                    $rate,
                     $eligibleDays,
                 ];
+                if ($monthlyRate !== null) {
+                    $bindings[] = $denominator;
+                }
                 if ($validated['payout_currency'] === 'USDT') {
+                    if ($monthlyRate !== null) {
+                        $bindings[] = $denominator;
+                    }
                     $bindings[] = $exchangeRate->quote_per_base;
                 }
                 $amount = DB::selectOne($sql, $bindings)?->amount;
@@ -207,7 +257,8 @@ class ProfitDistributionManagementController extends Controller
                 $allocations[] = [
                     'investment_id' => $investment->id,
                     'eligible_principal_bdt' => $investment->amount_bdt,
-                    'annual_rate_snapshot' => $investment->annual_rate_percent,
+                    'annual_rate_snapshot' => $monthlyRate === null ? $investment->annual_rate_percent : null,
+                    'monthly_rate_snapshot' => $monthlyRate,
                     'eligible_days' => $eligibleDays,
                     'payout_currency' => $validated['payout_currency'],
                     'amount' => (string) $amount,
@@ -229,6 +280,7 @@ class ProfitDistributionManagementController extends Controller
                 'period_start' => $periodStart->toDateString(),
                 'period_end' => $periodEnd->toDateString(),
                 'annual_rate_snapshot' => $term->annual_rate_percent,
+                'monthly_rate_snapshot' => $term->monthly_rate_percent,
                 'payout_currency' => $validated['payout_currency'],
                 'bdt_per_usdt_snapshot' => $exchangeRate?->quote_per_base,
                 'exchange_rate_id' => $exchangeRate?->id,
@@ -254,6 +306,8 @@ class ProfitDistributionManagementController extends Controller
                     'period_start' => $periodStart->toDateString(),
                     'period_end' => $periodEnd->toDateString(),
                     'payout_currency' => $validated['payout_currency'],
+                    'annual_rate_snapshot' => $term->annual_rate_percent,
+                    'monthly_rate_snapshot' => $term->monthly_rate_percent,
                     'allocation_count' => count($allocations),
                 ], JSON_THROW_ON_ERROR),
                 'ip_address' => $request->ip(),

@@ -15,6 +15,9 @@
         @if (session('status'))
             <div class="admin-flash" role="status">{{ session('status') }}</div>
         @endif
+        @if ($editing && $term->monthly_rate_percent === null && $term->annual_rate_percent !== null)
+            <div class="portal-notice portal-notice-warning"><div><p>{{ __('site.admin_projects.legacy_rate_notice') }}</p></div></div>
+        @endif
         @if ($project->is_sample)
             <div class="portal-notice portal-notice-warning"><div><h2>{{ __('site.admin_projects.sample_read_only') }}</h2><p>{{ __('site.admin_projects.sample_read_only_notice') }}</p></div></div>
         @else
@@ -85,16 +88,42 @@
                             <textarea name="summary_bn" rows="3" maxlength="1000" lang="bn">{{ old('summary_bn', $project->summary_bn) }}</textarea>
                             @error('summary_bn') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
-                        <label class="admin-form-field admin-form-field-wide">
-                            <span>{{ __('site.admin_projects.full_description') }} <b>*</b></span>
-                            <textarea name="description" rows="7" maxlength="20000" required>{{ old('description', $project->description) }}</textarea>
+                        <div class="admin-form-field admin-form-field-wide" data-rich-text>
+                            <span id="description-label">{{ __('site.admin_projects.full_description') }} <b>*</b></span>
+                            <textarea id="description-source" name="description" rows="7" maxlength="20000" required data-rich-text-source aria-labelledby="description-label">{{ $descriptionText }}</textarea>
+                            <div class="rich-text-widget" data-rich-text-widget hidden>
+                                <div class="rich-text-toolbar" role="toolbar" aria-label="{{ __('site.admin_projects.description_toolbar') }}">
+                                    <button type="button" data-rich-text-command="bold" aria-label="{{ __('site.admin_projects.description_bold') }}" title="{{ __('site.admin_projects.description_bold') }}"><strong>B</strong></button>
+                                    <button type="button" data-rich-text-command="italic" aria-label="{{ __('site.admin_projects.description_italic') }}" title="{{ __('site.admin_projects.description_italic') }}"><em>I</em></button>
+                                    <button type="button" data-rich-text-command="formatBlock" data-rich-text-value="p" aria-label="{{ __('site.admin_projects.description_paragraph') }}" title="{{ __('site.admin_projects.description_paragraph') }}">¶</button>
+                                    <button type="button" data-rich-text-command="formatBlock" data-rich-text-value="h3" aria-label="{{ __('site.admin_projects.description_heading') }}" title="{{ __('site.admin_projects.description_heading') }}">H</button>
+                                    <button type="button" data-rich-text-command="insertUnorderedList" aria-label="{{ __('site.admin_projects.description_bulleted_list') }}" title="{{ __('site.admin_projects.description_bulleted_list') }}">•</button>
+                                    <button type="button" data-rich-text-command="insertOrderedList" aria-label="{{ __('site.admin_projects.description_numbered_list') }}" title="{{ __('site.admin_projects.description_numbered_list') }}">1.</button>
+                                    <button type="button" data-rich-text-command="removeFormat" aria-label="{{ __('site.admin_projects.description_clear_formatting') }}" title="{{ __('site.admin_projects.description_clear_formatting') }}">Tx</button>
+                                </div>
+                                <div class="rich-text-content" data-rich-text-editor contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="description-label" lang="en">{!! $descriptionHtml !!}</div>
+                            </div>
+                            <small>{{ __('site.admin_projects.description_editor_help') }}</small>
                             @error('description') <small class="auth-error">{{ $message }}</small> @enderror
-                        </label>
-                        <label class="admin-form-field admin-form-field-wide">
-                            <span>{{ __('site.admin_projects.description_bn') }}</span>
-                            <textarea name="description_bn" rows="7" maxlength="20000" lang="bn">{{ old('description_bn', $project->description_bn) }}</textarea>
+                        </div>
+                        <div class="admin-form-field admin-form-field-wide" data-rich-text>
+                            <span id="description-bn-label">{{ __('site.admin_projects.description_bn') }}</span>
+                            <textarea id="description-bn-source" name="description_bn" rows="7" maxlength="20000" lang="bn" data-rich-text-source aria-labelledby="description-bn-label">{{ $descriptionBnText }}</textarea>
+                            <div class="rich-text-widget" data-rich-text-widget hidden>
+                                <div class="rich-text-toolbar" role="toolbar" aria-label="{{ __('site.admin_projects.description_toolbar') }}">
+                                    <button type="button" data-rich-text-command="bold" aria-label="{{ __('site.admin_projects.description_bold') }}" title="{{ __('site.admin_projects.description_bold') }}"><strong>B</strong></button>
+                                    <button type="button" data-rich-text-command="italic" aria-label="{{ __('site.admin_projects.description_italic') }}" title="{{ __('site.admin_projects.description_italic') }}"><em>I</em></button>
+                                    <button type="button" data-rich-text-command="formatBlock" data-rich-text-value="p" aria-label="{{ __('site.admin_projects.description_paragraph') }}" title="{{ __('site.admin_projects.description_paragraph') }}">¶</button>
+                                    <button type="button" data-rich-text-command="formatBlock" data-rich-text-value="h3" aria-label="{{ __('site.admin_projects.description_heading') }}" title="{{ __('site.admin_projects.description_heading') }}">H</button>
+                                    <button type="button" data-rich-text-command="insertUnorderedList" aria-label="{{ __('site.admin_projects.description_bulleted_list') }}" title="{{ __('site.admin_projects.description_bulleted_list') }}">•</button>
+                                    <button type="button" data-rich-text-command="insertOrderedList" aria-label="{{ __('site.admin_projects.description_numbered_list') }}" title="{{ __('site.admin_projects.description_numbered_list') }}">1.</button>
+                                    <button type="button" data-rich-text-command="removeFormat" aria-label="{{ __('site.admin_projects.description_clear_formatting') }}" title="{{ __('site.admin_projects.description_clear_formatting') }}">Tx</button>
+                                </div>
+                                <div class="rich-text-content" data-rich-text-editor contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="description-bn-label" lang="bn">{!! $descriptionBnHtml !!}</div>
+                            </div>
+                            <small>{{ __('site.admin_projects.description_editor_help') }}</small>
                             @error('description_bn') <small class="auth-error">{{ $message }}</small> @enderror
-                        </label>
+                        </div>
                     </div>
                 </section>
 
@@ -134,9 +163,29 @@
                             @error('unit_price_bdt') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
-                            <span>{{ __('site.admin_projects.annual_rate_percent') }}</span>
-                            <input type="number" name="annual_rate_percent" min="0" max="100" step="0.01" value="{{ old('annual_rate_percent', $term->annual_rate_percent !== null ? number_format((float) $term->annual_rate_percent, 2, '.', '') : '') }}">
-                            @error('annual_rate_percent') <small class="auth-error">{{ $message }}</small> @enderror
+                            <span>{{ __('site.admin_projects.monthly_rate_percent') }} <b>*</b></span>
+                            <input type="number" name="monthly_rate_percent" min="0" max="100" step="0.01" value="{{ old('monthly_rate_percent', $term->monthly_rate_percent !== null ? number_format((float) $term->monthly_rate_percent, 2, '.', '') : ($editing ? '' : '5.00')) }}" required>
+                            @error('monthly_rate_percent') <small class="auth-error">{{ $message }}</small> @enderror
+                        </label>
+                        <label class="admin-form-field">
+                            <span>{{ __('site.admin_projects.minimum_investment_usd') }} <b>*</b></span>
+                            <input type="number" name="minimum_investment_usd" min="0.01" step="0.01" value="{{ old('minimum_investment_usd', $term->minimum_investment_usd) }}" required>
+                            @error('minimum_investment_usd') <small class="auth-error">{{ $message }}</small> @enderror
+                        </label>
+                        <label class="admin-form-field">
+                            <span>{{ __('site.admin_projects.maximum_investment_usd') }} <b>*</b></span>
+                            <input type="number" name="maximum_investment_usd" min="0.01" step="0.01" value="{{ old('maximum_investment_usd', $term->maximum_investment_usd) }}" required>
+                            @error('maximum_investment_usd') <small class="auth-error">{{ $message }}</small> @enderror
+                        </label>
+                        <label class="admin-form-field">
+                            <span>{{ __('site.admin_projects.minimum_duration_months') }} <b>*</b></span>
+                            <input type="number" name="minimum_duration_months" min="3" max="24" step="1" value="{{ old('minimum_duration_months', $term->minimum_duration_months ?? 3) }}" required>
+                            @error('minimum_duration_months') <small class="auth-error">{{ $message }}</small> @enderror
+                        </label>
+                        <label class="admin-form-field">
+                            <span>{{ __('site.admin_projects.maximum_duration_months') }} <b>*</b></span>
+                            <input type="number" name="maximum_duration_months" min="3" max="24" step="1" value="{{ old('maximum_duration_months', $term->maximum_duration_months ?? 24) }}" required>
+                            @error('maximum_duration_months') <small class="auth-error">{{ $message }}</small> @enderror
                         </label>
                         <label class="admin-form-field">
                             <span>{{ __('site.admin_projects.return_min') }}</span>

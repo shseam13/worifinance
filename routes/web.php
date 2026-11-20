@@ -1,11 +1,17 @@
 <?php
 
+use App\Http\Controllers\AboutController;
 use App\Http\Controllers\Account\DepositRequestController;
 use App\Http\Controllers\Account\InvestmentController;
+use App\Http\Controllers\Account\InvestmentPortfolioController;
+use App\Http\Controllers\Account\InvestorActivityController;
 use App\Http\Controllers\Account\WithdrawalRequestController;
+use App\Http\Controllers\Admin\AuditLogManagementController;
 use App\Http\Controllers\Admin\DepositRequestManagementController;
 use App\Http\Controllers\Admin\InvestmentManagementController;
+use App\Http\Controllers\Admin\InvestmentReportController;
 use App\Http\Controllers\Admin\InvestorAccountManagementController;
+use App\Http\Controllers\Admin\LedgerTransactionManagementController;
 use App\Http\Controllers\Admin\MembershipChargeManagementController;
 use App\Http\Controllers\Admin\PasswordController;
 use App\Http\Controllers\Admin\ProfitDistributionManagementController;
@@ -22,6 +28,7 @@ use App\Http\Controllers\ProjectController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+Route::get('/about', AboutController::class)->name('about');
 Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
 Route::get('/projects/{project:slug}', [ProjectController::class, 'show'])->name('projects.show');
 Route::post('/language', [LocaleController::class, 'update'])->name('language.update');
@@ -47,6 +54,12 @@ Route::middleware(['auth', 'role:investor'])->prefix('account')->name('account.'
     Route::post('/deposits', [DepositRequestController::class, 'store'])->middleware('throttle:10,1')->name('deposits.store');
     Route::get('/projects/{project:slug}/invest', [InvestmentController::class, 'create'])->name('projects.invest.create');
     Route::post('/projects/{project:slug}/invest', [InvestmentController::class, 'store'])->middleware('throttle:10,1')->name('projects.invest.store');
+    Route::get('/investments', [InvestmentPortfolioController::class, 'index'])->name('investments.index');
+    Route::get('/investments/{investment}/statement', [InvestmentPortfolioController::class, 'statement'])->whereNumber('investment')->name('investments.statement');
+    Route::get('/investments/{investment}', [InvestmentPortfolioController::class, 'show'])->whereNumber('investment')->name('investments.show');
+    Route::get('/profit-wallet', [InvestorActivityController::class, 'profitWallet'])->name('profit-wallet');
+    Route::get('/profit-history', [InvestorActivityController::class, 'profitHistory'])->name('profit-history');
+    Route::get('/transactions', [InvestorActivityController::class, 'transactions'])->name('transactions.index');
     Route::get('/withdrawals/create', [WithdrawalRequestController::class, 'create'])->name('withdrawals.create');
     Route::post('/withdrawals', [WithdrawalRequestController::class, 'store'])->middleware('throttle:10,1')->name('withdrawals.store');
 });
@@ -62,6 +75,11 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('admin')->name('admin.')
     Route::post('/deposits/{deposit}/review', [DepositRequestManagementController::class, 'review'])->name('deposits.review');
     Route::get('/investments', [InvestmentManagementController::class, 'index'])->name('investments.index');
     Route::post('/investments/{investment}/review', [InvestmentManagementController::class, 'review'])->name('investments.review');
+    Route::post('/investments/{investment}/return-principal', [InvestmentManagementController::class, 'returnPrincipal'])->whereNumber('investment')->name('investments.return-principal');
+    Route::get('/reports/investments', [InvestmentReportController::class, 'index'])->name('reports.investments.index');
+    Route::get('/reports/investments/export', [InvestmentReportController::class, 'export'])->name('reports.investments.export');
+    Route::get('/transactions', [LedgerTransactionManagementController::class, 'index'])->name('transactions.index');
+    Route::get('/audit-logs', [AuditLogManagementController::class, 'index'])->name('audit-logs.index');
     Route::get('/withdrawals', [WithdrawalManagementController::class, 'index'])->name('withdrawals.index');
     Route::post('/withdrawals/{withdrawal}/review', [WithdrawalManagementController::class, 'review'])->name('withdrawals.review');
     Route::get('/membership-charges', [MembershipChargeManagementController::class, 'index'])->name('membership-charges.index');
@@ -69,7 +87,6 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('admin')->name('admin.')
     Route::get('/profit-distributions/create', [ProfitDistributionManagementController::class, 'create'])->name('profit-distributions.create');
     Route::post('/profit-distributions', [ProfitDistributionManagementController::class, 'store'])->name('profit-distributions.store');
     Route::post('/profit-distributions/{distribution}/transition', [ProfitDistributionManagementController::class, 'transition'])->name('profit-distributions.transition');
-    Route::post('/projects/demo-projects', [ProjectManagementController::class, 'toggleDemoProjects'])->name('projects.demo-projects');
     Route::post('/projects/categories', [ProjectManagementController::class, 'storeCategory'])->name('projects.categories.store');
     Route::delete('/projects/categories/{category}', [ProjectManagementController::class, 'destroyCategory'])->whereNumber('category')->name('projects.categories.destroy');
     Route::resource('projects', ProjectManagementController::class)->except(['show']);

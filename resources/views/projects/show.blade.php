@@ -68,7 +68,7 @@
             <section class="detail-copy">
                 <span class="eyebrow eyebrow-muted">{{ __('site.projects.overview') }}</span>
                 <h2>{{ __('site.projects.profile') }}</h2>
-                <p>{{ $project->displayDescription() ?? $project->displaySummary() }}</p>
+                <div class="project-description">{!! $project->displayDescriptionHtml() !!}</div>
             </section>
             <section class="detail-documents">
                 <span class="eyebrow eyebrow-muted">{{ __('site.projects.documents') }}</span>
@@ -90,10 +90,21 @@
                     @endif
                     @if ($project->currentTerms)
                         <div><dt>{{ __('site.projects.unit_price') }}</dt><dd>@money($project->currentTerms->unit_price_bdt, 'BDT')</dd></div>
-                        @if ($project->currentTerms->estimated_return_min_percent !== null && $project->currentTerms->estimated_return_max_percent !== null)
+                        @if ($project->currentTerms->monthly_rate_percent !== null)
+                            <div><dt>{{ __('site.projects.monthly_rate') }}</dt><dd>{{ number_format((float) $project->currentTerms->monthly_rate_percent, 2) }}%</dd></div>
+                        @elseif ($project->currentTerms->annual_rate_percent !== null)
+                            <div><dt>{{ __('site.projects.annual_rate') }}</dt><dd>{{ number_format((float) $project->currentTerms->annual_rate_percent, 2) }}%</dd></div>
+                        @endif
+                        @if ($project->currentTerms->monthly_rate_percent === null && $project->currentTerms->estimated_return_min_percent !== null && $project->currentTerms->estimated_return_max_percent !== null)
                             <div><dt>{{ __('site.projects.return_range') }}</dt><dd>{{ number_format((float) $project->currentTerms->estimated_return_min_percent, 2) }}%–{{ number_format((float) $project->currentTerms->estimated_return_max_percent, 2) }}%</dd></div>
-                        @else
+                        @elseif ($project->currentTerms->monthly_rate_percent === null && $project->currentTerms->estimated_return_min_percent === null)
                             <div><dt>{{ __('site.projects.return_range') }}</dt><dd>{{ __('site.projects.return_not_set') }}</dd></div>
+                        @endif
+                        @if ($project->currentTerms->minimum_investment_usd !== null && $project->currentTerms->maximum_investment_usd !== null)
+                            <div><dt>{{ __('site.projects.investment_limits') }}</dt><dd>USD {{ number_format((float) $project->currentTerms->minimum_investment_usd, 2) }}–{{ number_format((float) $project->currentTerms->maximum_investment_usd, 2) }}</dd></div>
+                        @endif
+                        @if ($project->currentTerms->minimum_duration_months !== null && $project->currentTerms->maximum_duration_months !== null)
+                            <div><dt>{{ __('site.projects.duration_range') }}</dt><dd>{{ $project->currentTerms->minimum_duration_months }}–{{ $project->currentTerms->maximum_duration_months }} {{ __('site.projects.months') }}</dd></div>
                         @endif
                     @endif
                     <div><dt>{{ __('site.projects.units') }}</dt><dd>{{ number_format($project->available_units) }}</dd></div>
@@ -101,10 +112,13 @@
                 @if ($project->currentTerms === null)
                     <div class="terms-notice">{{ __('site.projects.terms_notice') }}</div>
                 @endif
-                @if (! $project->is_sample && $project->available_units > 0 && $project->currentTerms?->annual_rate_percent !== null)
+                @if (! $project->is_sample && $project->available_units > 0 && $project->currentTerms?->monthly_rate_percent !== null && $project->currentTerms?->minimum_investment_usd !== null && $project->currentTerms?->maximum_investment_usd !== null)
                     @auth
                         @if (auth()->user()->role === 'investor')
                             <a class="button button-dark button-full investment-cta" href="{{ route('account.projects.invest.create', $project) }}">{{ __('site.investments.invest_now') }} <span aria-hidden="true">→</span></a>
+                        @endif
+                        @if ($project->currentTerms?->monthly_rate_percent !== null)
+                            <p class="detail-risk-note">{{ __('site.projects.investment_terms_notice') }}</p>
                         @endif
                     @else
                         <a class="button button-dark button-full investment-cta" href="{{ route('login') }}">{{ __('site.investments.login_to_invest') }} <span aria-hidden="true">→</span></a>

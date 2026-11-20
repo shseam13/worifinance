@@ -20,8 +20,8 @@
         </div>
 
         <nav class="deposit-status-tabs" aria-label="{{ __('site.investments.filter') }}">
-            @foreach (['pending', 'confirmed', 'rejected', 'all'] as $filter)
-                <a class="@if ($status === $filter) is-active @endif" href="{{ route('admin.investments.index', ['status' => $filter]) }}">{{ __('site.investments.filters.'.$filter) }}@if ($filter === 'pending') <span>{{ $pendingInvestments }}</span>@endif</a>
+            @foreach (['pending', 'active', 'confirmed', 'matured', 'completed', 'rejected', 'all'] as $filter)
+                <a class="@if ($status === $filter) is-active @endif" href="{{ route('admin.investments.index', ['status' => $filter]) }}">{{ __('site.investments.filters.'.$filter) }}@if ($filter === 'pending') <span>{{ $pendingInvestments }}</span>@elseif ($filter === 'matured') <span>{{ $pendingMaturityReturns }}</span>@elseif ($filter === 'completed') <span>{{ $completedInvestments }}</span>@endif</a>
             @endforeach
         </nav>
 
@@ -31,15 +31,18 @@
             @else
                 <div class="portal-table-wrap">
                     <table class="portal-table">
-                        <thead><tr><th>{{ __('site.auth.investor') }}</th><th>{{ __('site.auth.project') }}</th><th>{{ __('site.auth.units') }}</th><th>{{ __('site.auth.principal_bdt') }}</th><th>{{ __('site.auth.paid_amount') }}</th><th>{{ __('site.auth.date') }}</th><th>{{ __('site.auth.status') }}</th><th>{{ __('site.investments.review') }}</th></tr></thead>
+                        <thead><tr><th>{{ __('site.auth.investor') }}</th><th>{{ __('site.auth.project') }}</th><th>{{ __('site.auth.units') }}</th><th>{{ __('site.auth.principal_bdt') }}</th><th>{{ __('site.auth.paid_amount') }}</th><th>{{ __('site.investments.duration') }}</th><th>{{ __('site.investments.maturity') }}</th><th>{{ __('site.auth.date') }}</th><th>{{ __('site.auth.status') }}</th><th>{{ __('site.investments.review') }}</th></tr></thead>
                         <tbody>
                             @foreach ($investments as $investment)
+                                @php($principalReturnDue = $investment->status === 'confirmed' && $investment->matures_at !== null && \Illuminate\Support\Carbon::parse($investment->matures_at)->lessThanOrEqualTo(now()) && $investment->principal_returned_at === null)
                                 <tr>
                                     <td><span class="table-primary">{{ $investment->investor_name }}</span><span class="table-secondary">{{ $investment->investor_email }}</span></td>
                                     <td>{{ app()->getLocale() === 'bn' && $investment->project_name_bn ? $investment->project_name_bn : $investment->project_name }}</td>
                                     <td>{{ number_format((int) $investment->unit_count) }}</td>
                                     <td>@money($investment->amount_bdt, 'BDT')</td>
                                     <td>@money($investment->paid_amount, $investment->payment_currency)</td>
+                                    <td>{{ $investment->duration_months ? $investment->duration_months.' '.__('site.projects.months') : '—' }}</td>
+                                    <td>{{ $investment->matures_at ? \Illuminate\Support\Carbon::parse($investment->matures_at)->format('M j, Y') : '—' }}</td>
                                     <td>{{ \Illuminate\Support\Carbon::parse($investment->created_at)->format('M j, Y H:i') }}</td>
                                     <td><span class="status-pill status-{{ \Illuminate\Support\Str::slug($investment->status) }}">{{ __('site.auth.statuses.'.$investment->status) }}</span></td>
                                     <td>
@@ -52,6 +55,14 @@
                                                     <button class="button button-dark button-small" type="submit" name="decision" value="confirmed">{{ __('site.investments.confirm') }}</button>
                                                     <button class="button button-outline button-small" type="submit" name="decision" value="rejected">{{ __('site.deposits.reject') }}</button>
                                                 </div>
+                                            </form>
+                                        @elseif ($investment->principal_returned_at !== null)
+                                            <span>{{ __('site.investments.principal_returned_status') }}</span>
+                                        @elseif ($principalReturnDue)
+                                            <p class="admin-form-hint">{{ __('site.investments.principal_return_due') }}</p>
+                                            <form action="{{ route('admin.investments.return-principal', $investment->id) }}" method="post">
+                                                @csrf
+                                                <button class="button button-dark button-small" type="submit">{{ __('site.investments.principal_return_action') }}</button>
                                             </form>
                                         @else
                                             <span>{{ __('site.investments.no_review_needed') }}</span>

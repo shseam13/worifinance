@@ -139,7 +139,12 @@
                                 </div>
                             @endif
                         </div>
-                        @if ($spotlightProject->currentTerms?->estimated_return_min_percent !== null || $spotlightProject->currentTerms?->estimated_return_max_percent !== null)
+                        @if ($spotlightProject->currentTerms?->monthly_rate_percent !== null)
+                            <p class="landing-spotlight-return">
+                                {{ __('site.projects.monthly_rate') }}:
+                                <strong>{{ number_format((float) $spotlightProject->currentTerms->monthly_rate_percent, 2) }}%</strong>
+                            </p>
+                        @elseif ($spotlightProject->currentTerms?->estimated_return_min_percent !== null || $spotlightProject->currentTerms?->estimated_return_max_percent !== null)
                             <p class="landing-spotlight-return">
                                 {{ __('site.landing.published_return') }}:
                                 <strong>
@@ -273,19 +278,6 @@
                     <li><span aria-hidden="true">✓</span>{{ __("site.landing.account_point_".['one', 'two', 'three', 'four'][$number - 1]) }}</li>
                 @endforeach
             </ul>
-        </section>
-
-        <section class="landing-about" id="about-worifinance" aria-labelledby="about-title">
-            <div class="landing-about-visual">
-                <img src="{{ asset('images/projects/coastal-residences.svg') }}" alt="{{ __('site.hero.image_alt') }}" loading="lazy">
-                <span class="landing-about-mark"><img src="{{ asset('images/worifinance.jpg') }}" alt="" loading="lazy"></span>
-            </div>
-            <div class="landing-about-copy">
-                <span class="landing-eyebrow">{{ $homepage['about']['label'] }}</span>
-                <h2 id="about-title">{{ $homepage['about']['title'] }}</h2>
-                <p>{{ $homepage['about']['description'] }}</p>
-                <a class="landing-text-link" href="{{ route('projects.index') }}">{{ __('site.actions.explore') }} <span aria-hidden="true">↗</span></a>
-            </div>
         </section>
 
         <section class="landing-types" aria-labelledby="types-title">

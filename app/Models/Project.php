@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ProjectDescriptionFormatter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -116,5 +117,14 @@ class Project extends Model
         return app()->getLocale() === 'bn' && $this->description_bn
             ? $this->description_bn
             : $this->description;
+    }
+
+    public function displayDescriptionHtml(): string
+    {
+        $description = $this->displayDescription() ?? $this->displaySummary();
+
+        return $description === null
+            ? ''
+            : app(ProjectDescriptionFormatter::class)->sanitize($description);
     }
 }

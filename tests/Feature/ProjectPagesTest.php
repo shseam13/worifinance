@@ -20,10 +20,12 @@ class ProjectPagesTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('New project profiles are on the way.')
+            ->assertSee('Smart finance, Stronger future.')
+            ->assertDontSee('Thoughtful property investing')
             ->assertDontSee("Cox's Bazar Coastal Residences");
     }
 
-    public function test_homepage_renders_the_complete_property_landing_page_in_order(): void
+    public function test_homepage_renders_the_property_landing_page_without_the_about_section(): void
     {
         $response = $this->get(route('home'))->assertOk();
         $html = $response->getContent();
@@ -31,18 +33,42 @@ class ProjectPagesTest extends TestCase
         $this->assertIsString($html);
         $sectionPositions = array_map(
             fn (string $id): int|false => strpos($html, 'id="'.$id.'"'),
-            ['featured-projects', 'how-it-works', 'about-worifinance'],
+            ['featured-projects', 'how-it-works'],
         );
 
         $this->assertContainsOnly('int', $sectionPositions);
         $this->assertTrue($sectionPositions[0] < $sectionPositions[1]);
-        $this->assertTrue($sectionPositions[1] < $sectionPositions[2]);
         $response
+            ->assertSee(route('about'))
+            ->assertDontSee('id="about-worifinance"', false)
             ->assertSee(__('site.landing.platform_title'))
             ->assertSee(__('site.landing.features_title'))
             ->assertSee(__('site.landing.account_title'))
             ->assertSee(__('site.landing.types_title'))
             ->assertSee(__('site.landing.risk_notice'));
+    }
+
+    public function test_about_page_is_separate_and_lists_published_projects_only(): void
+    {
+        $publishedProject = $this->createProject('Published About Project');
+        $this->createProject('Draft About Project', 'draft');
+
+        $this->get(route('about'))
+            ->assertOk()
+            ->assertSee(__('site.about_page.hero_title'))
+            ->assertSee(__('site.about_page.principles_title'))
+            ->assertSee($publishedProject->displayName())
+            ->assertDontSee('Draft About Project')
+            ->assertSee('about-hero', false);
+    }
+
+    public function test_about_page_displays_bengali_copy_when_bengali_is_selected(): void
+    {
+        $this->withSession(['locale' => 'bn'])
+            ->get(route('about'))
+            ->assertOk()
+            ->assertSee(__('site.about_page.hero_title', [], 'bn'))
+            ->assertSee(__('site.about_page.principles_title', [], 'bn'));
     }
 
     public function test_homepage_carousel_and_project_showcase_use_published_projects_only(): void
@@ -112,6 +138,61 @@ class ProjectPagesTest extends TestCase
             'project_id' => $project->id,
             'unit_price_bdt' => '1200.00',
         ]);
+    }
+
+    public function test_project_prices_can_be_displayed_in_usd_using_the_separate_usd_rate(): void
+    {
+        $project = $this->createProject();
+        $this->addProjectTerm($project, '1200.00');
+        DB::table('platform_settings')->insert([
+            'key' => 'platform.display_currency',
+            'version' => 1,
+            'value' => 'USD',
+            'currency' => 'USD',
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('exchange_rates')->insert([
+            'base_currency' => 'USD',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '100.00000000',
+            'version' => 1,
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('exchange_rates')->insert([
+            'base_currency' => 'USDT',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '120.00000000',
+            'version' => 1,
+            'effective_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('12.00 USD')
+            ->assertDontSee('BDT 1,200.00');
+
+        $investor = User::factory()->create();
+        $investor->forceFill(['role' => 'investor', 'status' => 'active'])->save();
+        DB::table('wallet_accounts')->insert([
+            'user_id' => $investor->id,
+            'currency' => 'USDT',
+            'balance' => '10.00000000',
+            'reserved_balance' => '0.00000000',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($investor)
+            ->get(route('account.dashboard'))
+            ->assertOk()
+            ->assertSee('12.00 USD')
+            ->assertDontSee('10.00 USDT');
     }
 
     public function test_project_directory_lists_only_published_projects(): void
@@ -220,7 +301,6 @@ class ProjectPagesTest extends TestCase
             'description' => 'Verified property description.',
             'target_units' => 10,
             'available_units' => 8,
-            'is_sample' => false,
             'published_at' => $status === 'published' ? now() : null,
         ])->save();
 

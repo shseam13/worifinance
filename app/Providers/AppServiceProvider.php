@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(CurrencyFormatter::class);
+        $this->app->scoped(CurrencyFormatter::class);
     }
 
     /**

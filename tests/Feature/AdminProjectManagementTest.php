@@ -24,6 +24,9 @@ class AdminProjectManagementTest extends TestCase
             ->assertSee('Property information')
             ->assertSee('Project photos')
             ->assertSee('Residential')
+            ->assertSee('value="5.00"', false)
+            ->assertSee('value="3"', false)
+            ->assertSee('value="24"', false)
             ->assertSee('Create project');
     }
 
@@ -173,23 +176,85 @@ class AdminProjectManagementTest extends TestCase
         $this->assertDatabaseHas('projects', ['id' => $project->id]);
     }
 
-    public function test_admin_can_delete_a_sample_project_and_then_delete_its_category(): void
+    public function test_admin_project_catalogue_no_longer_offers_demo_projects(): void
+    {
+        $this->actingAs($this->admin())
+            ->get(route('admin.projects.index'))
+            ->assertOk()
+            ->assertDontSee('Enable demo projects')
+            ->assertDontSee('Populate the catalogue with illustrative examples');
+
+        $this->post('/admin/projects/demo-projects', ['enabled' => '1'])
+            ->assertMethodNotAllowed();
+
+        $this->assertDatabaseCount('projects', 0);
+    }
+
+    public function test_cleanup_migration_removes_sample_projects_and_preserves_categories(): void
     {
         $project = $this->createDraftProject();
         $project->forceFill(['is_sample' => true])->save();
         $category = ProjectCategory::query()->where('name', 'Residential')->firstOrFail();
+        $migration = include database_path('migrations/2026_11_19_234438_remove_sample_projects.php');
 
-        $this->actingAs($this->admin())
-            ->delete(route('admin.projects.destroy', $project))
-            ->assertRedirect(route('admin.projects.index'))
-            ->assertSessionHas('status', __('site.admin_projects.deleted'));
+        $migration->up();
 
         $this->assertDatabaseMissing('projects', ['id' => $project->id]);
+        $this->assertDatabaseMissing('project_terms', ['project_id' => $project->id]);
+        $this->assertDatabaseHas('project_categories', ['id' => $category->id]);
 
-        $this->delete(route('admin.projects.categories.destroy', $category))
+        $this->actingAs($this->admin())
+            ->delete(route('admin.projects.categories.destroy', $category))
             ->assertRedirect(route('admin.projects.index'));
 
         $this->assertDatabaseMissing('project_categories', ['id' => $category->id]);
+    }
+
+    public function test_cleanup_migration_refuses_to_remove_sample_projects_with_financial_history(): void
+    {
+        $project = $this->createDraftProject();
+        $project->forceFill(['is_sample' => true])->save();
+        $investor = User::factory()->create();
+        $projectTermId = $project->terms()->value('id');
+        DB::table('investments')->insert([
+            'user_id' => $investor->id,
+            'project_id' => $project->id,
+            'project_term_id' => $projectTermId,
+            'unit_count' => 1,
+            'unit_price_bdt' => '1200.00',
+            'amount_bdt' => '1200.00',
+            'payment_currency' => 'BDT',
+            'paid_amount' => '1200.00000000',
+            'status' => 'confirmed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('profit_distributions')->insert([
+            'project_id' => $project->id,
+            'project_term_id' => $projectTermId,
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-31',
+            'annual_rate_snapshot' => 5,
+            'payout_currency' => 'BDT',
+            'status' => 'draft',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $migration = include database_path('migrations/2026_11_19_234438_remove_sample_projects.php');
+
+        try {
+            $migration->up();
+            $this->fail('The cleanup migration should refuse to delete projects with financial history.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame(
+                'Sample projects with financial history cannot be removed by this migration.',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+        $this->assertDatabaseHas('investments', ['project_id' => $project->id]);
+        $this->assertDatabaseHas('profit_distributions', ['project_id' => $project->id]);
     }
 
     public function test_admin_cannot_create_a_duplicate_project_category(): void
@@ -225,6 +290,12 @@ class AdminProjectManagementTest extends TestCase
             'project_id' => $project->id,
             'version' => 1,
             'unit_price_bdt' => '1200.00',
+            'annual_rate_percent' => null,
+            'monthly_rate_percent' => '8.5000',
+            'minimum_investment_usd' => '10.00',
+            'maximum_investment_usd' => '1000.00',
+            'minimum_duration_months' => 3,
+            'maximum_duration_months' => 24,
         ]);
         $this->assertDatabaseCount('project_images', 2);
         $this->assertDatabaseHas('admin_audit_logs', ['action' => 'project.created']);
@@ -235,8 +306,74 @@ class AdminProjectManagementTest extends TestCase
         $this->get(route('projects.show', $project))
             ->assertOk()
             ->assertSee('Verified Dhaka Property')
+            ->assertSee('Monthly return rate')
+            ->assertSee('8.50%')
             ->assertSee('data-project-gallery')
             ->assertSee('data-gallery-thumbnail');
+    }
+
+    public function test_admin_can_publish_sanitized_rich_descriptions_in_english_and_bengali(): void
+    {
+        Storage::fake('public');
+
+        $this->actingAs($this->admin())
+            ->post(route('admin.projects.store'), [
+                ...$this->projectData(),
+                'description' => '<p onclick="alert(1)">English <strong>bold</strong></p><ul><li>First point</li></ul><script>alert("unsafe")</script>',
+                'description_bn' => '<p>বাংলা <strong>গাঢ়</strong></p><ol><li>প্রথম পয়েন্ট</li></ol>',
+                'status' => 'published',
+                'cover_image' => $this->image('cover.png'),
+            ])
+            ->assertRedirect();
+
+        $project = Project::query()->where('slug', 'verified-dhaka-property')->firstOrFail();
+        $this->assertStringContainsString('<strong>bold</strong>', $project->description);
+        $this->assertStringNotContainsString('onclick', $project->description);
+        $this->assertStringNotContainsString('<script', $project->description);
+        $this->assertStringContainsString('<strong>গাঢ়</strong>', $project->description_bn);
+        $this->assertStringContainsString('<ol><li>প্রথম পয়েন্ট</li></ol>', $project->description_bn);
+
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('<p>English <strong>bold</strong></p>', false)
+            ->assertSee('<ul><li>First point</li></ul>', false)
+            ->assertDontSee('alert(', false);
+
+        $this->withSession(['locale' => 'bn'])
+            ->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('<p>বাংলা <strong>গাঢ়</strong></p>', false)
+            ->assertSee('<ol><li>প্রথম পয়েন্ট</li></ol>', false);
+    }
+
+    public function test_public_project_page_sanitizes_legacy_description_html(): void
+    {
+        $project = $this->createDraftProject();
+        $project->forceFill([
+            'description' => '<p>Legacy <strong>formatted</strong> content.</p><img src="x" onerror="alert(1)"><script>alert("unsafe")</script>',
+            'status' => 'published',
+            'published_at' => now(),
+        ])->save();
+
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('<p>Legacy <strong>formatted</strong> content.</p>', false)
+            ->assertDontSee('onerror=', false)
+            ->assertDontSee('alert("unsafe")', false);
+    }
+
+    public function test_public_project_page_formats_legacy_plain_text_descriptions(): void
+    {
+        $project = $this->createDraftProject();
+        $project->forceFill([
+            'description' => "Legacy first paragraph.\n\nLegacy second paragraph.",
+            'status' => 'published',
+            'published_at' => now(),
+        ])->save();
+
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('<p>Legacy first paragraph.</p><p>Legacy second paragraph.</p>', false);
     }
 
     public function test_admin_can_publish_a_project_without_category_location_or_developer(): void
@@ -270,7 +407,7 @@ class AdminProjectManagementTest extends TestCase
     public function test_project_term_percentages_reject_more_than_two_decimal_places(): void
     {
         $projectData = $this->projectData();
-        $projectData['annual_rate_percent'] = '8.555';
+        $projectData['monthly_rate_percent'] = '8.555';
         $projectData['estimated_return_min_percent'] = '5.555';
         $projectData['estimated_return_max_percent'] = '12.555';
 
@@ -282,10 +419,30 @@ class AdminProjectManagementTest extends TestCase
             ])
             ->assertRedirect(route('admin.projects.create'))
             ->assertSessionHasErrors([
-                'annual_rate_percent',
+                'monthly_rate_percent',
                 'estimated_return_min_percent',
                 'estimated_return_max_percent',
             ]);
+
+        $this->assertDatabaseCount('projects', 0);
+    }
+
+    public function test_project_terms_reject_reversed_usd_limits_and_duration_ranges(): void
+    {
+        $projectData = $this->projectData();
+        $projectData['minimum_investment_usd'] = '100.00';
+        $projectData['maximum_investment_usd'] = '50.00';
+        $projectData['minimum_duration_months'] = '12';
+        $projectData['maximum_duration_months'] = '6';
+
+        $this->actingAs($this->admin())
+            ->from(route('admin.projects.create'))
+            ->post(route('admin.projects.store'), [
+                ...$projectData,
+                'status' => 'draft',
+            ])
+            ->assertRedirect(route('admin.projects.create'))
+            ->assertSessionHasErrors(['maximum_investment_usd', 'minimum_duration_months', 'maximum_duration_months']);
 
         $this->assertDatabaseCount('projects', 0);
     }
@@ -343,40 +500,6 @@ class AdminProjectManagementTest extends TestCase
             ->assertSessionHasErrors(['cover_image', 'gallery.0']);
 
         $this->assertDatabaseCount('projects', 0);
-    }
-
-    public function test_admin_can_enable_and_hide_original_illustrative_demo_projects(): void
-    {
-        $this->actingAs($this->admin())
-            ->post(route('admin.projects.demo-projects'), ['enabled' => '1'])
-            ->assertRedirect(route('admin.projects.index'));
-
-        $this->assertDatabaseCount('projects', 3);
-        $this->assertDatabaseHas('projects', [
-            'slug' => 'coxs-bazar-coastal-residences',
-            'is_sample' => true,
-            'status' => 'published',
-        ]);
-        $this->assertDatabaseHas('project_images', [
-            'path' => 'images/projects/coastal-residences.svg',
-            'is_primary' => true,
-        ]);
-        $this->get(route('projects.index'))
-            ->assertOk()
-            ->assertSee('Cox&#039;s Bazar Coastal Residences', false)
-            ->assertSee('Sample concept')
-            ->assertSee('not a real investment offer');
-
-        $this->post(route('admin.projects.demo-projects'), ['enabled' => '0'])
-            ->assertRedirect(route('admin.projects.index'));
-
-        $this->assertDatabaseHas('projects', [
-            'slug' => 'coxs-bazar-coastal-residences',
-            'is_sample' => true,
-            'status' => 'draft',
-            'published_at' => null,
-        ]);
-        $this->assertDatabaseCount('admin_audit_logs', 2);
     }
 
     public function test_project_terms_are_versioned_when_admin_changes_them(): void
@@ -501,7 +624,6 @@ class AdminProjectManagementTest extends TestCase
             'target_units' => 1,
             'available_units' => 1,
             'status' => 'draft',
-            'is_sample' => false,
         ])->save();
         $otherImage = $otherProject->images()->make();
         $otherImage->forceFill([
@@ -588,7 +710,6 @@ class AdminProjectManagementTest extends TestCase
             'target_units' => 20,
             'available_units' => 10,
             'status' => 'draft',
-            'is_sample' => false,
         ])->save();
 
         $term = new ProjectTerm;
@@ -619,7 +740,11 @@ class AdminProjectManagementTest extends TestCase
             'target_units' => 20,
             'available_units' => 10,
             'unit_price_bdt' => '1200.00',
-            'annual_rate_percent' => '8.5',
+            'monthly_rate_percent' => '8.5',
+            'minimum_investment_usd' => '10.00',
+            'maximum_investment_usd' => '1000.00',
+            'minimum_duration_months' => '3',
+            'maximum_duration_months' => '24',
             'estimated_return_min_percent' => '5',
             'estimated_return_max_percent' => '12',
             'effective_from' => now()->toDateString(),

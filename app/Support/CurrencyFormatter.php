@@ -12,9 +12,10 @@ class CurrencyFormatter
 
     private bool $displayCurrencyLoaded = false;
 
-    private ?float $rate = null;
-
-    private bool $rateLoaded = false;
+    /**
+     * @var array<string, float>
+     */
+    private array $rates = [];
 
     public function displayCurrency(): string
     {
@@ -23,7 +24,7 @@ class CurrencyFormatter
 
     public function format(int|float|string|null $amount, string $sourceCurrency = 'BDT'): string
     {
-        if (! in_array($sourceCurrency, ['BDT', 'USDT'], true)) {
+        if (! in_array($sourceCurrency, ['BDT', 'USDT', 'USD'], true)) {
             throw new InvalidArgumentException("Unsupported currency: {$sourceCurrency}");
         }
 
@@ -34,18 +35,27 @@ class CurrencyFormatter
         $displayCurrency = $this->displayCurrency();
         $value = (float) $amount;
 
-        if ($sourceCurrency !== $displayCurrency) {
-            if (! $this->hasConfiguredDisplayCurrency()) {
-                return $this->formatAmount($value, $sourceCurrency);
-            }
-
-            $rate = $this->exchangeRate();
-            $value = $sourceCurrency === 'BDT'
-                ? $value / $rate
-                : $value * $rate;
+        if ($sourceCurrency === $displayCurrency) {
+            return $this->formatAmount($value, $displayCurrency);
         }
 
-        return $this->formatAmount($value, $displayCurrency);
+        if (! $this->hasConfiguredDisplayCurrency()) {
+            return $this->formatAmount($value, $sourceCurrency);
+        }
+
+        $amountBdt = match ($sourceCurrency) {
+            'BDT' => $value,
+            'USDT' => $value * $this->exchangeRate('USDT'),
+            'USD' => $value * $this->exchangeRate('USD'),
+        };
+        $convertedAmount = match ($displayCurrency) {
+            'BDT' => $amountBdt,
+            'USDT' => $amountBdt / $this->exchangeRate('USDT'),
+            'USD' => $amountBdt / $this->exchangeRate('USD'),
+            default => throw new InvalidArgumentException("Unsupported display currency: {$displayCurrency}"),
+        };
+
+        return $this->formatAmount($convertedAmount, $displayCurrency);
     }
 
     private function formatAmount(float $amount, string $currency): string
@@ -72,26 +82,26 @@ class CurrencyFormatter
         return $this->configuredDisplayCurrency() !== null;
     }
 
-    private function exchangeRate(): float
+    private function exchangeRate(string $baseCurrency): float
     {
-        if (! $this->rateLoaded) {
+        if (! array_key_exists($baseCurrency, $this->rates)) {
             $value = DB::table('exchange_rates')
-                ->where('base_currency', 'USDT')
+                ->where('base_currency', $baseCurrency)
                 ->where('quote_currency', 'BDT')
                 ->orderByDesc('version')
                 ->value('quote_per_base');
 
             if ($value !== null) {
-                $this->rate = (float) $value;
+                $this->rates[$baseCurrency] = (float) $value;
             }
-
-            $this->rateLoaded = true;
         }
 
-        if ($this->rate === null || $this->rate <= 0) {
-            throw new RuntimeException('A valid USDT-to-BDT exchange rate is required for site-wide currency conversion.');
+        $rate = $this->rates[$baseCurrency] ?? null;
+
+        if ($rate === null || $rate <= 0) {
+            throw new RuntimeException("A valid {$baseCurrency}-to-BDT exchange rate is required for site-wide currency conversion.");
         }
 
-        return $this->rate;
+        return $rate;
     }
 }

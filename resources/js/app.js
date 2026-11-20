@@ -18,6 +18,54 @@ if (menuToggle instanceof HTMLButtonElement && mobileMenu instanceof HTMLElement
     });
 }
 
+document.querySelectorAll('[data-rich-text]').forEach((field) => {
+    if (!(field instanceof HTMLElement) || typeof document.execCommand !== 'function') {
+        return;
+    }
+
+    const source = field.querySelector('[data-rich-text-source]');
+    const widget = field.querySelector('[data-rich-text-widget]');
+    const editor = field.querySelector('[data-rich-text-editor]');
+
+    if (
+        !(source instanceof HTMLTextAreaElement)
+        || !(widget instanceof HTMLElement)
+        || !(editor instanceof HTMLElement)
+    ) {
+        return;
+    }
+
+    const synchronize = () => {
+        source.value = editor.innerHTML;
+    };
+
+    source.hidden = true;
+    source.required = false;
+    widget.hidden = false;
+    synchronize();
+    editor.addEventListener('input', synchronize);
+
+    field.querySelectorAll('[data-rich-text-command]').forEach((button) => {
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        button.addEventListener('mousedown', (event) => event.preventDefault());
+        button.addEventListener('click', () => {
+            const command = button.dataset.richTextCommand;
+            if (!command) {
+                return;
+            }
+
+            editor.focus();
+            document.execCommand(command, false, button.dataset.richTextValue ?? '');
+            synchronize();
+        });
+    });
+
+    field.closest('form')?.addEventListener('submit', synchronize);
+});
+
 document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) {
         return;

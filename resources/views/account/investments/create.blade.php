@@ -27,7 +27,9 @@
             </div>
             <div class="project-summary-list">
                 <div class="project-summary-row"><span>{{ __('site.projects.unit_price') }}</span><strong>@money($project->currentTerms->unit_price_bdt, 'BDT')</strong></div>
-                <div class="project-summary-row"><span>{{ __('site.investments.annual_rate') }}</span><strong>{{ number_format((float) $project->currentTerms->annual_rate_percent, 2) }}%</strong></div>
+                <div class="project-summary-row"><span>{{ __('site.investments.monthly_rate') }}</span><strong>{{ number_format((float) $project->currentTerms->monthly_rate_percent, 2) }}%</strong></div>
+                <div class="project-summary-row"><span>{{ __('site.investments.minimum_investment') }}</span><strong>USD {{ number_format((float) $project->currentTerms->minimum_investment_usd, 2) }}</strong></div>
+                <div class="project-summary-row"><span>{{ __('site.investments.maximum_investment') }}</span><strong>USD {{ number_format((float) $project->currentTerms->maximum_investment_usd, 2) }}</strong></div>
                 <div class="project-summary-row"><span>{{ __('site.projects.units') }}</span><strong>{{ number_format($project->available_units) }}</strong></div>
             </div>
         </section>
@@ -41,6 +43,16 @@
                         <span>{{ __('site.investments.units') }} <b>*</b></span>
                         <input type="number" name="units" min="1" max="{{ $project->available_units }}" step="1" value="{{ old('units', 1) }}" required>
                         @error('units')<small class="auth-error">{{ $message }}</small>@enderror
+                    </label>
+                    <label class="admin-form-field">
+                        <span>{{ __('site.investments.duration') }} <b>*</b></span>
+                        <select name="duration_months" required>
+                            @for ($months = (int) ($project->currentTerms->minimum_duration_months ?? 3); $months <= (int) ($project->currentTerms->maximum_duration_months ?? 24); $months++)
+                                <option value="{{ $months }}" @selected((int) old('duration_months', $project->currentTerms->minimum_duration_months ?? 3) === $months)>{{ $months }} {{ __('site.projects.months') }}</option>
+                            @endfor
+                        </select>
+                        <small>{{ __('site.investments.duration_locked_notice') }}</small>
+                        @error('duration_months')<small class="auth-error">{{ $message }}</small>@enderror
                     </label>
                     <label class="admin-form-field">
                         <span>{{ __('site.investments.payment_currency') }} <b>*</b></span>
@@ -66,6 +78,11 @@
                 @endif
                 @if ($exchangeRate !== null && $usdtEnabled)
                     <p class="admin-form-hint">{{ __('site.investments.current_rate', ['rate' => $exchangeRate]) }}</p>
+                @endif
+                @if ($usdExchangeRate !== null && (float) $usdExchangeRate > 0)
+                    <p class="admin-form-hint">{{ __('site.investments.current_usd_rate', ['rate' => $usdExchangeRate]) }}</p>
+                @else
+                    <p class="admin-form-hint">{{ __('site.investments.usd_exchange_rate_unavailable') }}</p>
                 @endif
             </section>
             <div class="admin-form-actions">

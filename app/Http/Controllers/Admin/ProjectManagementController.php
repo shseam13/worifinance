@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\ProjectCategory;
 use App\Models\ProjectImage;
 use App\Models\ProjectTerm;
+use App\Support\ProjectDescriptionFormatter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -22,6 +23,8 @@ use Throwable;
 
 class ProjectManagementController extends Controller
 {
+    public function __construct(private ProjectDescriptionFormatter $descriptionFormatter) {}
+
     public function index(Request $request): View
     {
         $query = Project::query()->with(['primaryImage', 'categoryRecord'])->withCount('terms');
@@ -42,7 +45,6 @@ class ProjectManagementController extends Controller
             ...$this->adminLayoutCounts(),
             'projects' => $query->latest('updated_at')->paginate(12)->withQueryString(),
             'categories' => ProjectCategory::query()->orderBy('name')->get(),
-            'demoProjectsEnabled' => Project::query()->where('is_sample', true)->where('status', 'published')->exists(),
             'status' => $request->string('status')->toString(),
             'search' => $request->string('search')->toString(),
         ]);
@@ -59,6 +61,9 @@ class ProjectManagementController extends Controller
         $term = new ProjectTerm;
         $term->forceFill([
             'unit_price_bdt' => null,
+            'monthly_rate_percent' => '5.0000',
+            'minimum_duration_months' => 3,
+            'maximum_duration_months' => 24,
             'effective_from' => now()->toDateString(),
         ]);
 
@@ -68,90 +73,8 @@ class ProjectManagementController extends Controller
             'term' => $term,
             'editing' => false,
             'categories' => ProjectCategory::query()->orderBy('name')->get(),
+            ...$this->descriptionEditorData($project),
         ]);
-    }
-
-    public function toggleDemoProjects(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'enabled' => ['required', 'boolean'],
-        ]);
-        $enabled = (bool) $validated['enabled'];
-
-        DB::transaction(function () use ($request, $enabled): void {
-            $publishedBefore = Project::query()->where('is_sample', true)->where('status', 'published')->count();
-
-            if ($enabled) {
-                foreach ($this->demoProjects() as $attributes) {
-                    $project = Project::query()->where('slug', $attributes['slug'])->first();
-
-                    if ($project === null) {
-                        $project = new Project;
-                        $project->forceFill([
-                            ...array_diff_key($attributes, ['image' => true]),
-                            'is_sample' => true,
-                            'status' => 'draft',
-                            'published_at' => null,
-                        ])->save();
-                    } elseif (! $project->is_sample) {
-                        throw ValidationException::withMessages([
-                            'enabled' => __('site.admin_projects.demo_slug_conflict', ['name' => $attributes['name']]),
-                        ]);
-                    }
-
-                    if (! $project->terms()->exists()) {
-                        $term = new ProjectTerm;
-                        $term->forceFill([
-                            'project_id' => $project->id,
-                            'version' => 1,
-                            'unit_price_bdt' => '1000.00',
-                            'effective_from' => now()->toDateString(),
-                        ])->save();
-                    }
-
-                    if (! $project->images()->exists()) {
-                        $image = new ProjectImage;
-                        $image->forceFill([
-                            'project_id' => $project->id,
-                            'path' => $attributes['image'],
-                            'alt_text' => $attributes['name'],
-                            'sort_order' => 0,
-                            'is_primary' => true,
-                        ])->save();
-                    }
-                }
-            }
-
-            Project::query()
-                ->where('is_sample', true)
-                ->update([
-                    'status' => $enabled ? 'published' : 'draft',
-                    'published_at' => $enabled ? now() : null,
-                    'updated_at' => now(),
-                ]);
-
-            DB::table('admin_audit_logs')->insert([
-                'admin_user_id' => $request->user()->id,
-                'action' => $enabled ? 'demo_projects.enabled' : 'demo_projects.disabled',
-                'subject_type' => 'demo_project_collection',
-                'subject_id' => null,
-                'before_values' => json_encode([
-                    'published_count' => $publishedBefore,
-                ], JSON_THROW_ON_ERROR),
-                'after_values' => json_encode([
-                    'enabled' => $enabled,
-                    'published_count' => Project::query()->where('is_sample', true)->where('status', 'published')->count(),
-                ], JSON_THROW_ON_ERROR),
-                'ip_address' => $request->ip(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        });
-
-        return redirect()->route('admin.projects.index')->with(
-            'status',
-            __($enabled ? 'site.admin_projects.demo_enabled' : 'site.admin_projects.demo_disabled'),
-        );
     }
 
     public function store(Request $request): RedirectResponse
@@ -220,6 +143,7 @@ class ProjectManagementController extends Controller
             'term' => $term,
             'editing' => true,
             'categories' => ProjectCategory::query()->orderBy('name')->get(),
+            ...$this->descriptionEditorData($project),
         ]);
     }
 
@@ -430,7 +354,11 @@ class ProjectManagementController extends Controller
             'available_units' => ['required', 'integer', 'min:0', 'lte:target_units'],
             'expected_handover_at' => ['nullable', 'date'],
             'unit_price_bdt' => ['required', 'numeric', 'gt:0', 'max:999999999999999999', 'regex:/^\d{1,18}(?:\.\d{1,2})?$/'],
-            'annual_rate_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
+            'monthly_rate_percent' => ['required', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
+            'minimum_investment_usd' => ['required', 'numeric', 'gt:0', 'max:999999999999999999.99', 'regex:/^\d{1,18}(?:\.\d{1,2})?$/'],
+            'maximum_investment_usd' => ['required', 'numeric', 'gte:minimum_investment_usd', 'max:999999999999999999.99', 'regex:/^\d{1,18}(?:\.\d{1,2})?$/'],
+            'minimum_duration_months' => ['required', 'integer', 'min:3', 'max:24', 'lte:maximum_duration_months'],
+            'maximum_duration_months' => ['required', 'integer', 'min:3', 'max:24', 'gte:minimum_duration_months'],
             'estimated_return_min_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
             'estimated_return_max_percent' => ['nullable', 'numeric', 'between:0,100', 'regex:/^\d{1,3}(?:\.\d{1,2})?$/'],
             'effective_from' => ['required', 'date'],
@@ -470,7 +398,28 @@ class ProjectManagementController extends Controller
             ]);
         }
 
+        $validated['description'] = $this->descriptionFormatter->sanitize($validated['description']);
+        $validated['description_bn'] = isset($validated['description_bn'])
+            ? $this->descriptionFormatter->sanitize($validated['description_bn'])
+            : null;
+
         return $validated;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function descriptionEditorData(Project $project): array
+    {
+        $description = (string) old('description', $project->description ?? '');
+        $descriptionBn = (string) old('description_bn', $project->description_bn ?? '');
+
+        return [
+            'descriptionHtml' => $this->descriptionFormatter->sanitize($description),
+            'descriptionText' => $this->descriptionFormatter->plainText($description),
+            'descriptionBnHtml' => $this->descriptionFormatter->sanitize($descriptionBn),
+            'descriptionBnText' => $this->descriptionFormatter->plainText($descriptionBn),
+        ];
     }
 
     /**
@@ -505,15 +454,18 @@ class ProjectManagementController extends Controller
     {
         $current = $project->terms()->latest('version')->first();
         $terms = [
-            'unit_price_bdt' => number_format((float) $validated['unit_price_bdt'], 2, '.', ''),
-            'annual_rate_percent' => isset($validated['annual_rate_percent'])
-                ? number_format((float) $validated['annual_rate_percent'], 2, '.', '')
-                : null,
+            'unit_price_bdt' => $this->fixedDecimal($validated['unit_price_bdt'], 2),
+            'annual_rate_percent' => null,
+            'monthly_rate_percent' => $this->fixedDecimal($validated['monthly_rate_percent'], 4),
+            'minimum_investment_usd' => $this->fixedDecimal($validated['minimum_investment_usd'], 2),
+            'maximum_investment_usd' => $this->fixedDecimal($validated['maximum_investment_usd'], 2),
+            'minimum_duration_months' => $validated['minimum_duration_months'],
+            'maximum_duration_months' => $validated['maximum_duration_months'],
             'estimated_return_min_percent' => isset($validated['estimated_return_min_percent'])
-                ? number_format((float) $validated['estimated_return_min_percent'], 2, '.', '')
+                ? $this->fixedDecimal($validated['estimated_return_min_percent'], 4)
                 : null,
             'estimated_return_max_percent' => isset($validated['estimated_return_max_percent'])
-                ? number_format((float) $validated['estimated_return_max_percent'], 2, '.', '')
+                ? $this->fixedDecimal($validated['estimated_return_max_percent'], 4)
                 : null,
             'effective_from' => $validated['effective_from'],
         ];
@@ -533,6 +485,14 @@ class ProjectManagementController extends Controller
         ])->save();
 
         return $term;
+    }
+
+    private function fixedDecimal(string|int|float $value, int $scale): string
+    {
+        [$integer, $fraction] = array_pad(explode('.', (string) $value, 2), 2, '');
+
+        return (ltrim($integer, '0') ?: '0')
+            .'.'.str_pad(substr($fraction, 0, $scale), $scale, '0');
     }
 
     /**
@@ -682,71 +642,6 @@ class ProjectManagementController extends Controller
         return [
             'pendingDeposits' => DB::table('deposit_requests')->where('status', 'pending')->count(),
             'pendingWithdrawals' => DB::table('withdrawal_requests')->where('status', 'pending')->count(),
-        ];
-    }
-
-    /**
-     * @return array<int, array<string, string>>
-     */
-    private function demoProjects(): array
-    {
-        $disclaimer = 'Illustrative sample only. This is not a real property, verified ownership, or investment offer.';
-
-        return [
-            [
-                'slug' => 'coxs-bazar-coastal-residences',
-                'name' => "Cox's Bazar Coastal Residences",
-                'name_bn' => 'কক্সবাজার কোস্টাল রেসিডেন্সেস',
-                'category' => 'Hospitality',
-                'project_type' => 'Hotel',
-                'location' => "Kolatoli, Cox's Bazar",
-                'location_bn' => 'কলাতলী, কক্সবাজার',
-                'developer' => 'Illustrative sample profile',
-                'developer_bn' => 'নমুনা প্রোফাইল',
-                'summary' => 'An illustrative property profile showing the public project and image gallery experience.',
-                'summary_bn' => 'পাবলিক প্রকল্প ও ছবির গ্যালারির অভিজ্ঞতা দেখানোর নমুনা প্রোফাইল।',
-                'description' => $disclaimer,
-                'description_bn' => 'শুধু উদাহরণ হিসেবে দেখানো হয়েছে। এটি প্রকৃত সম্পত্তি, যাচাইকৃত মালিকানা বা বিনিয়োগ প্রস্তাব নয়।',
-                'target_units' => '10000',
-                'available_units' => '10000',
-                'image' => 'images/projects/coastal-residences.svg',
-            ],
-            [
-                'slug' => 'dhaka-urban-commercial',
-                'name' => 'Dhaka Urban Commercial',
-                'name_bn' => 'ঢাকা আরবান কমার্শিয়াল',
-                'category' => 'Commercial',
-                'project_type' => 'Commercial',
-                'location' => 'Purbachal, Dhaka',
-                'location_bn' => 'পূর্বাচল, ঢাকা',
-                'developer' => 'Illustrative sample profile',
-                'developer_bn' => 'নমুনা প্রোফাইল',
-                'summary' => 'An illustrative commercial property profile for the Worifinance demo catalogue.',
-                'summary_bn' => 'ওরিফাইন্যান্সের নমুনা তালিকার জন্য একটি উদাহরণ বাণিজ্যিক সম্পত্তির প্রোফাইল।',
-                'description' => $disclaimer,
-                'description_bn' => 'শুধু উদাহরণ হিসেবে দেখানো হয়েছে। এটি প্রকৃত সম্পত্তি, যাচাইকৃত মালিকানা বা বিনিয়োগ প্রস্তাব নয়।',
-                'target_units' => '10000',
-                'available_units' => '10000',
-                'image' => 'images/projects/urban-commercial.svg',
-            ],
-            [
-                'slug' => 'greenfields-land-project',
-                'name' => 'Greenfields Land Project',
-                'name_bn' => 'গ্রিনফিল্ডস ল্যান্ড প্রজেক্ট',
-                'category' => 'Land',
-                'project_type' => 'Land',
-                'location' => 'Greater Dhaka',
-                'location_bn' => 'বৃহত্তর ঢাকা',
-                'developer' => 'Illustrative sample profile',
-                'developer_bn' => 'নমুনা প্রোফাইল',
-                'summary' => 'An illustrative land project profile demonstrating bilingual project information.',
-                'summary_bn' => 'দ্বিভাষিক প্রকল্পের তথ্য দেখানোর জন্য একটি নমুনা জমি প্রকল্পের প্রোফাইল।',
-                'description' => $disclaimer,
-                'description_bn' => 'শুধু উদাহরণ হিসেবে দেখানো হয়েছে। এটি প্রকৃত সম্পত্তি, যাচাইকৃত মালিকানা বা বিনিয়োগ প্রস্তাব নয়।',
-                'target_units' => '10000',
-                'available_units' => '10000',
-                'image' => 'images/projects/greenfields-land.svg',
-            ],
         ];
     }
 }

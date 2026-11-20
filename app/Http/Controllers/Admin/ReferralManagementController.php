@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ReferralManagementController extends Controller
 {
+    private const REFERRAL_DEPOSIT_HOLD_MONTHS = 3;
+
     public function index(): View
     {
         $currentCommissionValue = DB::table('platform_settings')
@@ -110,6 +113,11 @@ class ReferralManagementController extends Controller
                 ->first();
             abort_if($investment === null, 404);
             abort_unless($investment->status === 'confirmed', 409, __('site.admin_referrals.investment_not_confirmed'));
+            abort_unless(
+                $this->hasCompletedFirstDepositHold((int) $record->referred_user_id),
+                409,
+                __('site.admin_referrals.deposit_hold_period'),
+            );
 
             DB::table('wallet_accounts')->insertOrIgnore([
                 'user_id' => $record->referrer_user_id,
@@ -183,5 +191,58 @@ class ReferralManagementController extends Controller
         });
 
         return redirect()->route('admin.referrals.index')->with('status', __('site.admin_referrals.credited'));
+    }
+
+    private function hasCompletedFirstDepositHold(int $referredUserId): bool
+    {
+        $firstApprovedDepositAt = DB::table('deposit_requests')
+            ->where('user_id', $referredUserId)
+            ->where('status', 'approved')
+            ->whereNotNull('reviewed_at')
+            ->orderBy('reviewed_at')
+            ->orderBy('id')
+            ->value('reviewed_at');
+
+        if ($firstApprovedDepositAt === null) {
+            return false;
+        }
+
+        $holdStartedAt = Carbon::parse($firstApprovedDepositAt);
+        $currentTime = now();
+
+        while (true) {
+            $holdEndsAt = $holdStartedAt->copy()->addMonthsNoOverflow(self::REFERRAL_DEPOSIT_HOLD_MONTHS);
+            if ($currentTime->lt($holdEndsAt)) {
+                return false;
+            }
+
+            $withdrawalAt = DB::table('withdrawal_requests')
+                ->where('user_id', $referredUserId)
+                ->where('status', 'paid')
+                ->where('reviewed_at', '>', $holdStartedAt)
+                ->where('reviewed_at', '<', $holdEndsAt)
+                ->orderBy('reviewed_at')
+                ->orderBy('id')
+                ->value('reviewed_at');
+
+            if ($withdrawalAt === null) {
+                return true;
+            }
+
+            $nextApprovedDepositAt = DB::table('deposit_requests')
+                ->where('user_id', $referredUserId)
+                ->where('status', 'approved')
+                ->whereNotNull('reviewed_at')
+                ->where('reviewed_at', '>', $withdrawalAt)
+                ->orderBy('reviewed_at')
+                ->orderBy('id')
+                ->value('reviewed_at');
+
+            if ($nextApprovedDepositAt === null) {
+                return false;
+            }
+
+            $holdStartedAt = Carbon::parse($nextApprovedDepositAt);
+        }
     }
 }

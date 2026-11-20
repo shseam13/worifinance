@@ -28,22 +28,6 @@
             </div>
         </div>
 
-        <section class="demo-project-control">
-            <div>
-                <span class="section-eyebrow">{{ __('site.admin_projects.demo_label') }}</span>
-                <h2>{{ __('site.admin_projects.demo_title') }}</h2>
-                <p>{{ __('site.admin_projects.demo_description') }}</p>
-                <small>{{ __('site.admin_projects.demo_terms_notice') }}</small>
-            </div>
-            <form action="{{ route('admin.projects.demo-projects') }}" method="post">
-                @csrf
-                <input type="hidden" name="enabled" value="{{ $demoProjectsEnabled ? '0' : '1' }}">
-                <button class="button {{ $demoProjectsEnabled ? 'button-outline' : 'button-dark' }}" type="submit">
-                    {{ $demoProjectsEnabled ? __('site.admin_projects.hide_demos') : __('site.admin_projects.enable_demos') }}
-                </button>
-            </form>
-        </section>
-
         <section class="portal-panel">
             <div class="portal-panel-heading">
                 <div>

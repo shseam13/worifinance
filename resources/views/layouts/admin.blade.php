@@ -48,6 +48,10 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                     <span>{{ __('site.auth.nav_investments') }}</span>
                 </a>
+                <a class="admin-nav-link @if (request()->routeIs('admin.reports.investments.*')) is-active @endif" href="{{ route('admin.reports.investments.index') }}" @if (request()->routeIs('admin.reports.investments.*')) aria-current="page" @endif>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-7"/></svg>
+                    <span>{{ __('site.auth.nav_investment_reports') }}</span>
+                </a>
             </div>
 
             <div class="admin-nav-group">
@@ -65,6 +69,10 @@
                 <a class="admin-nav-link @if (request()->routeIs('admin.profit-distributions.*')) is-active @endif" href="{{ route('admin.profit-distributions.index') }}" @if (request()->routeIs('admin.profit-distributions.*')) aria-current="page" @endif>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                     <span>{{ __('site.auth.nav_profit_distribution') }}</span>
+                </a>
+                <a class="admin-nav-link @if (request()->routeIs('admin.transactions.*')) is-active @endif" href="{{ route('admin.transactions.index') }}" @if (request()->routeIs('admin.transactions.*')) aria-current="page" @endif>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                    <span>{{ __('site.auth.nav_ledger_transactions') }}</span>
                 </a>
                 <a class="admin-nav-link @if (request()->routeIs('admin.membership-charges.*')) is-active @endif" href="{{ route('admin.membership-charges.index') }}" @if (request()->routeIs('admin.membership-charges.*')) aria-current="page" @endif>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-12 5h6"/></svg>
@@ -86,11 +94,10 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 5v2"/></svg>
                     <span>{{ __('site.auth.nav_update_password') }}</span>
                 </a>
-                <span class="admin-nav-link is-disabled" aria-disabled="true">
+                <a class="admin-nav-link @if (request()->routeIs('admin.audit-logs.*')) is-active @endif" href="{{ route('admin.audit-logs.index') }}" @if (request()->routeIs('admin.audit-logs.*')) aria-current="page" @endif>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-7"/></svg>
                     <span>{{ __('site.auth.nav_audit_log') }}</span>
-                    <small>{{ __('site.auth.coming_soon') }}</small>
-                </span>
+                </a>
             </div>
         </nav>
 
@@ -124,7 +131,7 @@
                     <span aria-hidden="true">|</span>
                     <button type="submit" name="locale" value="bn" lang="bn" @if (app()->getLocale() === 'bn') aria-current="true" @endif>বাংলা</button>
                 </form>
-                <div class="admin-user">
+                <div class="admin-user" id="profile">
                     <span class="admin-avatar" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(auth()->user()->name, 0, 1)) }}</span>
                     <span class="admin-user-copy"><strong>{{ auth()->user()->name }}</strong><small>{{ __('site.auth.admin_role_label') }}</small></span>
                 </div>

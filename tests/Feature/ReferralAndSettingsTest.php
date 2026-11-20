@@ -124,6 +124,7 @@ class ReferralAndSettingsTest extends TestCase
             ->assertOk()
             ->assertSee('Site-wide currency display')
             ->assertSee('Enter how many BDT equal 1 USDT.')
+            ->assertSee('USD to BDT rate')
             ->assertSee('Homepage content')
             ->assertSee('Terms and conditions')
             ->assertSee('Community and contact links')
@@ -138,6 +139,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '4.2500',
                 'display_currency' => 'USDT',
                 'usdt_to_bdt_rate' => '123.45678901',
+                'usd_to_bdt_rate' => '110.00000000',
                 'bdt_payment_instructions' => 'Send to the configured BDT account.',
                 'usdt_payment_instructions' => 'USDT network: TRC20; enter the verified address.',
             ])
@@ -172,6 +174,13 @@ class ReferralAndSettingsTest extends TestCase
             'version' => 1,
             'created_by_user_id' => $admin->id,
         ]);
+        $this->assertDatabaseHas('exchange_rates', [
+            'base_currency' => 'USD',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '110.00000000',
+            'version' => 1,
+            'created_by_user_id' => $admin->id,
+        ]);
         $this->assertDatabaseHas('platform_settings', [
             'key' => 'platform.payment_instructions.bdt',
             'version' => 1,
@@ -182,7 +191,7 @@ class ReferralAndSettingsTest extends TestCase
             'version' => 1,
             'value' => 'USDT network: TRC20; enter the verified address.',
         ]);
-        $this->assertDatabaseCount('admin_audit_logs', 8);
+        $this->assertDatabaseCount('admin_audit_logs', 9);
     }
 
     public function test_super_admin_can_save_a_fixed_referral_commission_and_fixed_amount_is_required(): void
@@ -196,6 +205,7 @@ class ReferralAndSettingsTest extends TestCase
             'referral_commission_fixed_bdt' => '125.50',
             'display_currency' => 'BDT',
             'usdt_to_bdt_rate' => '120',
+            'usd_to_bdt_rate' => '110',
         ];
 
         $this->actingAs($admin)
@@ -237,6 +247,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '0',
                 'display_currency' => 'BDT',
                 'usdt_to_bdt_rate' => '120',
+                'usd_to_bdt_rate' => '110',
                 'terms' => $terms,
             ])
             ->assertRedirect(route('admin.settings.edit'));
@@ -280,6 +291,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '0',
                 'display_currency' => 'BDT',
                 'usdt_to_bdt_rate' => '120',
+                'usd_to_bdt_rate' => '110',
                 'terms' => [
                     'en' => '<script>alert("xss")</script>',
                     'bn' => 'নিরাপদ শর্তাবলি।',
@@ -318,6 +330,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '4.2500',
                 'display_currency' => 'BDT',
                 'usdt_to_bdt_rate' => '123.45678901',
+                'usd_to_bdt_rate' => '110.00000000',
                 'homepage' => [
                     'hero' => [
                         'title_before' => [
@@ -368,17 +381,21 @@ class ReferralAndSettingsTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('Build your future')
-            ->assertSee('A clearer way to invest')
             ->assertSee('Review every detail')
             ->assertSee('https://t.me/worifinance', false)
             ->assertDontSee('https://wa.me/');
+        $this->get(route('about'))
+            ->assertOk()
+            ->assertSee('A clearer way to invest');
 
         $this->post(route('language.update'), ['locale' => 'bn'])->assertRedirect(route('home'));
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('আপনার ভবিষ্যৎ গড়ুন')
-            ->assertSee('বিনিয়োগের আরও স্বচ্ছ পথ')
             ->assertSee('প্রতিটি বিবরণ পর্যালোচনা করুন');
+        $this->get(route('about'))
+            ->assertOk()
+            ->assertSee('বিনিয়োগের আরও স্বচ্ছ পথ');
 
         $this->actingAs($admin)
             ->put(route('admin.settings.update'), [
@@ -387,6 +404,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '4.2500',
                 'display_currency' => 'BDT',
                 'usdt_to_bdt_rate' => '123.45678901',
+                'usd_to_bdt_rate' => '110.00000000',
                 'homepage' => [
                     'hero' => [
                         'caption' => ['en' => 'Updated caption', 'bn' => 'আপডেট ক্যাপশন'],
@@ -426,6 +444,7 @@ class ReferralAndSettingsTest extends TestCase
                 'referral_commission_percent' => '4.2500',
                 'display_currency' => 'BDT',
                 'usdt_to_bdt_rate' => '123.45678901',
+                'usd_to_bdt_rate' => '110.00000000',
                 'social_links' => $socialLinks,
             ])
             ->assertRedirect(route('admin.settings.edit'))
@@ -444,13 +463,42 @@ class ReferralAndSettingsTest extends TestCase
                 'annual_fee' => '250.50',
                 'minimum_withdrawal' => '500.00',
                 'referral_commission_percent' => '4.2500',
-                'display_currency' => 'USD',
+                'display_currency' => 'EUR',
                 'usdt_to_bdt_rate' => '0',
+                'usd_to_bdt_rate' => '0',
             ])
-            ->assertSessionHasErrors(['display_currency', 'usdt_to_bdt_rate']);
+            ->assertSessionHasErrors(['display_currency', 'usdt_to_bdt_rate', 'usd_to_bdt_rate']);
 
         $this->assertDatabaseCount('exchange_rates', 0);
         $this->assertDatabaseCount('platform_settings', 0);
+    }
+
+    public function test_super_admin_can_select_usd_as_site_wide_display_currency(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'super_admin', 'status' => 'active'])->save();
+
+        $this->actingAs($admin)
+            ->put(route('admin.settings.update'), [
+                'annual_fee' => '0',
+                'minimum_withdrawal' => '0',
+                'referral_commission_percent' => '0',
+                'display_currency' => 'USD',
+                'usdt_to_bdt_rate' => '120',
+                'usd_to_bdt_rate' => '110',
+            ])
+            ->assertRedirect(route('admin.settings.edit'));
+
+        $this->assertDatabaseHas('platform_settings', [
+            'key' => 'platform.display_currency',
+            'value' => 'USD',
+            'currency' => 'USD',
+        ]);
+        $this->assertDatabaseHas('exchange_rates', [
+            'base_currency' => 'USD',
+            'quote_currency' => 'BDT',
+            'quote_per_base' => '110.00000000',
+        ]);
     }
 
     public function test_investor_can_open_referral_dashboard_without_any_activity(): void

@@ -107,6 +107,7 @@ class BinanceQrPaymentTest extends TestCase
             'referral_commission_percent' => '2.0000',
             'display_currency' => 'BDT',
             'usdt_to_bdt_rate' => '120.00000000',
+            'usd_to_bdt_rate' => '110.00000000',
             'bdt_payment_instructions' => 'Send BDT to the configured account.',
             'usdt_payment_instructions' => 'Send USDT using the configured Binance wallet and network.',
         ];

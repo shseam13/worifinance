@@ -29,6 +29,7 @@ class SettingsController extends Controller
             'referralCommissionType' => $this->currentSetting('platform.referral_commission_type', 'percentage'),
             'displayCurrency' => $this->currentSetting('platform.display_currency', 'BDT'),
             'usdtToBdtRate' => $this->currentExchangeRate(),
+            'usdToBdtRate' => $this->currentExchangeRate('USD'),
             'bdtPaymentInstructions' => $this->currentSetting('platform.payment_instructions.bdt', ''),
             'usdtPaymentInstructions' => $this->currentSetting('platform.payment_instructions.usdt', ''),
             'usdtQrUrl' => $usdtQrPath !== '' ? Storage::disk('public')->url($usdtQrPath) : null,
@@ -70,8 +71,9 @@ class SettingsController extends Controller
                 'max:9999999999999999.99',
                 'regex:/^\d{1,16}(?:\.\d{1,2})?$/',
             ],
-            'display_currency' => ['required', 'in:BDT,USDT'],
+            'display_currency' => ['required', 'in:BDT,USDT,USD'],
             'usdt_to_bdt_rate' => ['required', 'numeric', 'gt:0', 'max:999999999999.99999999', 'regex:/^\d{1,12}(?:\.\d{1,8})?$/'],
+            'usd_to_bdt_rate' => ['required', 'numeric', 'gt:0', 'max:999999999999.99999999', 'regex:/^\d{1,12}(?:\.\d{1,8})?$/'],
             'bdt_payment_instructions' => ['nullable', 'string', 'max:5000'],
             'usdt_payment_instructions' => ['nullable', 'string', 'max:5000'],
             'usdt_qr_code' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:5120'],
@@ -229,50 +231,8 @@ class SettingsController extends Controller
                     $this->createSettingVersion($request, 'platform.payment_qr.usdt', $uploadedQrPath, 'USDT');
                 }
 
-                $rateVersion = (int) DB::table('exchange_rates')
-                    ->where('base_currency', 'USDT')
-                    ->where('quote_currency', 'BDT')
-                    ->lockForUpdate()
-                    ->max('version');
-                $nextRateVersion = $rateVersion + 1;
-                $rate = $this->fixedDecimal($validated['usdt_to_bdt_rate'], 8);
-                $previousRate = $rateVersion === 0
-                    ? null
-                    : DB::table('exchange_rates')
-                        ->where('base_currency', 'USDT')
-                        ->where('quote_currency', 'BDT')
-                        ->where('version', $rateVersion)
-                        ->value('quote_per_base');
-
-                DB::table('exchange_rates')->insert([
-                    'base_currency' => 'USDT',
-                    'quote_currency' => 'BDT',
-                    'quote_per_base' => $rate,
-                    'version' => $nextRateVersion,
-                    'effective_at' => now(),
-                    'created_by_user_id' => $request->user()->id,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                DB::table('admin_audit_logs')->insert([
-                    'admin_user_id' => $request->user()->id,
-                    'action' => 'platform_setting.updated',
-                    'subject_type' => 'exchange_rate',
-                    'subject_id' => null,
-                    'before_values' => json_encode([
-                        'pair' => 'USDT/BDT',
-                        'quote_per_base' => $previousRate,
-                    ], JSON_THROW_ON_ERROR),
-                    'after_values' => json_encode([
-                        'pair' => 'USDT/BDT',
-                        'quote_per_base' => $rate,
-                        'version' => $nextRateVersion,
-                    ], JSON_THROW_ON_ERROR),
-                    'ip_address' => $request->ip(),
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                $this->createExchangeRateVersion($request, 'USDT', $validated['usdt_to_bdt_rate']);
+                $this->createExchangeRateVersion($request, 'USD', $validated['usd_to_bdt_rate']);
 
                 if (isset($validated['homepage'])) {
                     $homepage = array_replace_recursive($homepageBefore, $validated['homepage']);
@@ -396,13 +356,61 @@ class SettingsController extends Controller
             .'.'.str_pad(substr($fraction, 0, $scale), $scale, '0');
     }
 
-    private function currentExchangeRate(): string
+    private function currentExchangeRate(string $baseCurrency = 'USDT'): string
     {
         return (string) (DB::table('exchange_rates')
-            ->where('base_currency', 'USDT')
+            ->where('base_currency', $baseCurrency)
             ->where('quote_currency', 'BDT')
             ->orderByDesc('version')
             ->value('quote_per_base') ?? '');
+    }
+
+    private function createExchangeRateVersion(Request $request, string $baseCurrency, string $value): void
+    {
+        $rateVersion = (int) DB::table('exchange_rates')
+            ->where('base_currency', $baseCurrency)
+            ->where('quote_currency', 'BDT')
+            ->lockForUpdate()
+            ->max('version');
+        $nextRateVersion = $rateVersion + 1;
+        $rate = $this->fixedDecimal($value, 8);
+        $previousRate = $rateVersion === 0
+            ? null
+            : DB::table('exchange_rates')
+                ->where('base_currency', $baseCurrency)
+                ->where('quote_currency', 'BDT')
+                ->where('version', $rateVersion)
+                ->value('quote_per_base');
+
+        DB::table('exchange_rates')->insert([
+            'base_currency' => $baseCurrency,
+            'quote_currency' => 'BDT',
+            'quote_per_base' => $rate,
+            'version' => $nextRateVersion,
+            'effective_at' => now(),
+            'created_by_user_id' => $request->user()->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('admin_audit_logs')->insert([
+            'admin_user_id' => $request->user()->id,
+            'action' => 'platform_setting.updated',
+            'subject_type' => 'exchange_rate',
+            'subject_id' => null,
+            'before_values' => json_encode([
+                'pair' => "{$baseCurrency}/BDT",
+                'quote_per_base' => $previousRate,
+            ], JSON_THROW_ON_ERROR),
+            'after_values' => json_encode([
+                'pair' => "{$baseCurrency}/BDT",
+                'quote_per_base' => $rate,
+                'version' => $nextRateVersion,
+            ], JSON_THROW_ON_ERROR),
+            'ip_address' => $request->ip(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function createSettingVersion(Request $request, string $key, string $value, ?string $currency): void

@@ -49,6 +49,7 @@
                         <select name="display_currency" required>
                             <option value="BDT" @selected(old('display_currency', $displayCurrency) === 'BDT')>BDT</option>
                             <option value="USDT" @selected(old('display_currency', $displayCurrency) === 'USDT')>USDT</option>
+                            <option value="USD" @selected(old('display_currency', $displayCurrency) === 'USD')>USD</option>
                         </select>
                         @error('display_currency')<small class="auth-error">{{ $message }}</small>@enderror
                     </label>
@@ -57,6 +58,12 @@
                         <input name="usdt_to_bdt_rate" type="number" min="0.00000001" max="999999999999.99999999" step="0.00000001" value="{{ old('usdt_to_bdt_rate', $usdtToBdtRate) }}" required>
                         <small>{{ __('site.admin_settings.usdt_to_bdt_rate_help') }}</small>
                         @error('usdt_to_bdt_rate')<small class="auth-error">{{ $message }}</small>@enderror
+                    </label>
+                    <label class="admin-form-field">
+                        <span>{{ __('site.admin_settings.usd_to_bdt_rate') }} <b>*</b></span>
+                        <input name="usd_to_bdt_rate" type="number" min="0.00000001" max="999999999999.99999999" step="0.00000001" value="{{ old('usd_to_bdt_rate', $usdToBdtRate) }}" required>
+                        <small>{{ __('site.admin_settings.usd_to_bdt_rate_help') }}</small>
+                        @error('usd_to_bdt_rate')<small class="auth-error">{{ $message }}</small>@enderror
                     </label>
                 </div>
                 <p class="admin-form-hint">{{ __('site.admin_settings.currency_conversion_notice') }}</p>

@@ -46,10 +46,10 @@
                                             <summary>{{ __('site.profit_distributions.view_allocations') }}</summary>
                                             <div class="portal-table-wrap">
                                                 <table class="portal-table">
-                                                    <thead><tr><th>{{ __('site.auth.investor') }}</th><th>{{ __('site.profit_distributions.principal') }}</th><th>{{ __('site.profit_distributions.annual_rate') }}</th><th>{{ __('site.profit_distributions.eligible_days') }}</th><th>{{ __('site.profit_distributions.total') }}</th></tr></thead>
+                                                    <thead><tr><th>{{ __('site.auth.investor') }}</th><th>{{ __('site.profit_distributions.principal') }}</th><th>{{ __('site.profit_distributions.rate') }}</th><th>{{ __('site.profit_distributions.eligible_days') }}</th><th>{{ __('site.profit_distributions.total') }}</th></tr></thead>
                                                     <tbody>
                                                         @foreach ($allocationItems->get($distribution->id, collect()) as $allocation)
-                                                            <tr><td><span class="table-primary">{{ $allocation->investor_name }}</span><span class="table-secondary">{{ $allocation->investor_email }}</span></td><td>@money($allocation->eligible_principal_bdt, 'BDT')</td><td>{{ number_format((float) $allocation->annual_rate_snapshot, 4) }}%</td><td>{{ number_format((int) $allocation->eligible_days) }}</td><td>@money($allocation->amount, $allocation->payout_currency)</td></tr>
+                                                            <tr><td><span class="table-primary">{{ $allocation->investor_name }}</span><span class="table-secondary">{{ $allocation->investor_email }}</span></td><td>@money($allocation->eligible_principal_bdt, 'BDT')</td><td>{{ number_format((float) ($allocation->monthly_rate_snapshot ?? $allocation->annual_rate_snapshot), 2) }}%{{ $allocation->monthly_rate_snapshot !== null ? ' / '.__('site.profit_distributions.month') : ' / '.__('site.profit_distributions.year') }}</td><td>{{ number_format((int) $allocation->eligible_days) }}</td><td>@money($allocation->amount, $allocation->payout_currency)</td></tr>
                                                         @endforeach
                                                     </tbody>
                                                 </table>
